@@ -11,6 +11,7 @@ export const useFilesStore = defineStore("files", {
     getAllFiles: (state) => state.files,
     getPdfFiles: (state) => state.files.filter((f) => f.type === "pdf"),
     getImageFiles: (state) => state.files.filter((f) => f.type === "image"),
+    getLinkFiles: (state) => state.files.filter((f) => f.type === "link"),
   },
 
   actions: {

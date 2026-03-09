@@ -11,7 +11,21 @@ export const useExamsStore = defineStore("exams", {
 
   getters: {
     getAllExams: (state) => state.exams,
-    getActiveExams: (state) => state.exams.filter((e) => e.isActive),
+    getActiveExams: (state) => {
+      const now = new Date();
+      return state.exams.filter((e) => {
+        if (!e.isActive) return false;
+        // إذا لم تُحدد نافذة وقت → متاح دائماً
+        if (!e.startDateTime && !e.endDateTime) return true;
+        const start = e.startDateTime ? new Date(e.startDateTime) : null;
+        const end = e.endDateTime ? new Date(e.endDateTime) : null;
+        if (start && now < start) return false; // لم يبدأ بعد
+        if (end && now > end) return false; // انتهى
+        return true;
+      });
+    },
+    // جميع الامتحانات النشطة بغض النظر عن الوقت (للمعلم)
+    getAllActiveExams: (state) => state.exams.filter((e) => e.isActive),
     getExamById: (state) => (id) =>
       state.exams.find((e) => e.firebaseKey === id || e.id === id),
     getResultsByExam: (state) => (examId) =>
@@ -26,6 +40,17 @@ export const useExamsStore = defineStore("exams", {
     getOngoingExam: (state) => (examId, studentEmail) => {
       const key = `${examId}_${studentEmail}`;
       return state.ongoingExams[key] || null;
+    },
+    // إرجاع حالة وقت الامتحان: 'upcoming' | 'open' | 'ended' | 'no-window'
+    getExamTimeStatus: () => (exam) => {
+      if (!exam) return "no-window";
+      if (!exam.startDateTime && !exam.endDateTime) return "no-window";
+      const now = new Date();
+      const start = exam.startDateTime ? new Date(exam.startDateTime) : null;
+      const end = exam.endDateTime ? new Date(exam.endDateTime) : null;
+      if (start && now < start) return "upcoming";
+      if (end && now > end) return "ended";
+      return "open";
     },
   },
 
@@ -248,10 +273,11 @@ export const useExamsStore = defineStore("exams", {
 
     async saveOngoingExamsToFirebase() {
       try {
-        // حفظ كل امتحان جاري بشكل منفصل
-        for (const [key, value] of Object.entries(this.ongoingExams)) {
-          await firebaseDB.put(DB_PATHS.ONGOING_EXAMS, key, value);
-        }
+        // حفظ كل الامتحانات الجارية دفعة واحدة
+        const savePromises = Object.entries(this.ongoingExams).map(
+          ([key, value]) => firebaseDB.put(DB_PATHS.ONGOING_EXAMS, key, value)
+        );
+        await Promise.all(savePromises);
       } catch (error) {
         console.error("Error saving ongoing exams:", error);
       }

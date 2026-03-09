@@ -248,12 +248,27 @@
                     type="button"
                     class="btn btn-secondary"
                     data-bs-dismiss="modal"
+                    :disabled="isSaving"
                   >
                     إلغاء
                   </button>
-                  <button type="submit" class="btn btn-primary-custom">
-                    <i class="bi bi-check-lg me-2"></i>
-                    {{ editingQuestion ? "حفظ التعديلات" : "إضافة السؤال" }}
+                  <button
+                    type="submit"
+                    class="btn btn-primary-custom"
+                    :disabled="isSaving"
+                  >
+                    <span
+                      v-if="isSaving"
+                      class="spinner-border spinner-border-sm me-2"
+                    ></span>
+                    <i v-else class="bi bi-check-lg me-2"></i>
+                    {{
+                      isSaving
+                        ? "جاري الحفظ..."
+                        : editingQuestion
+                        ? "حفظ التعديلات"
+                        : "إضافة السؤال"
+                    }}
                   </button>
                 </div>
               </form>
@@ -321,6 +336,12 @@ export default {
     const handleImageUpload = (event) => {
       const file = event.target.files[0];
       if (file) {
+        // تحقق من حجم الملف (الحد الأقصى 500KB)
+        if (file.size > 500 * 1024) {
+          alert("حجم الصورة كبير جداً. الحد الأقصى 500KB");
+          event.target.value = "";
+          return;
+        }
         const reader = new FileReader();
         reader.onload = (e) => {
           form.value.image = e.target.result;
@@ -329,7 +350,12 @@ export default {
       }
     };
 
+    const isSaving = ref(false);
+
     const saveQuestion = async () => {
+      if (isSaving.value) return;
+      isSaving.value = true;
+
       const questionData = {
         type: form.value.type,
         text: form.value.text,
@@ -356,10 +382,15 @@ export default {
         // إغلاق Modal
         const modal = document.getElementById("questionModal");
         const bootstrapModal = bootstrap.Modal.getInstance(modal);
-        bootstrapModal.hide();
+        if (bootstrapModal) {
+          bootstrapModal.hide();
+        }
         resetForm();
       } catch (error) {
         console.error("Error saving question:", error);
+        alert("حدث خطأ أثناء حفظ السؤال. يرجى المحاولة مرة أخرى.");
+      } finally {
+        isSaving.value = false;
       }
     };
 
@@ -390,6 +421,7 @@ export default {
       form,
       editingQuestion,
       filteredQuestions,
+      isSaving,
       resetForm,
       addOption,
       removeOption,

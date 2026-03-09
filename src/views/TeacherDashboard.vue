@@ -4,15 +4,61 @@
       <!-- Welcome Header -->
       <div class="welcome-header mb-4">
         <div class="row align-items-center">
-          <div class="col-md-8">
+          <div class="col-md-6">
             <h2 class="mb-1">مرحباً بك، {{ authStore.user?.name }}</h2>
             <p class="text-muted mb-0">إدارة الأسئلة والامتحانات والملفات</p>
           </div>
-          <div class="col-md-4 text-md-end">
+          <div
+            class="col-md-6 d-flex align-items-center justify-content-md-end gap-3 mt-3 mt-md-0 flex-wrap"
+          >
+            <!-- زر عرض الطلاب -->
+            <button
+              class="btn-students-header"
+              @click="showStudentsPanel = !showStudentsPanel"
+            >
+              <i class="bi bi-people-fill me-2"></i>
+              الطلاب
+              <span class="students-badge">{{
+                authStore.students.length
+              }}</span>
+            </button>
             <span class="date-display">
               <i class="bi bi-calendar3 me-2"></i>
               {{ currentDate }}
             </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Students Panel -->
+      <div v-if="showStudentsPanel" class="students-panel mb-4">
+        <div class="students-panel-header">
+          <h6 class="mb-0">
+            <i class="bi bi-people-fill me-2"></i>قائمة الطلاب المسجلين
+          </h6>
+          <button class="btn-close-panel" @click="showStudentsPanel = false">
+            <i class="bi bi-x-lg"></i>
+          </button>
+        </div>
+        <div class="students-panel-body">
+          <div v-if="authStore.students.length === 0" class="no-students">
+            <i class="bi bi-person-x"></i>
+            <p>لا يوجد طلاب مسجلين بعد</p>
+          </div>
+          <div v-else class="students-grid">
+            <div
+              v-for="student in authStore.students"
+              :key="student.firebaseKey"
+              class="student-chip"
+            >
+              <div class="student-chip-avatar">
+                {{ student.name?.charAt(0)?.toUpperCase() }}
+              </div>
+              <div class="student-chip-info">
+                <span class="student-chip-name">{{ student.name }}</span>
+                <span class="student-chip-email">{{ student.email }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -178,7 +224,7 @@
 </template>
 
 <script>
-import { computed, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useAuthStore } from "@/store/authStore";
 import { useQuestionsStore } from "@/store/questionsStore";
 import { useExamsStore } from "@/store/examsStore";
@@ -191,6 +237,7 @@ export default {
     const questionsStore = useQuestionsStore();
     const examsStore = useExamsStore();
     const filesStore = useFilesStore();
+    const showStudentsPanel = ref(false);
 
     // تحميل البيانات من Firebase عند تحميل الصفحة
     onMounted(async () => {
@@ -199,6 +246,7 @@ export default {
         examsStore.loadExams(),
         examsStore.loadResults(),
         filesStore.loadFiles(),
+        authStore.loadStudents(),
       ]);
     });
 
@@ -230,6 +278,7 @@ export default {
       currentDate,
       recentResults,
       getScoreClass,
+      showStudentsPanel,
     };
   },
 };
@@ -244,6 +293,153 @@ export default {
 .date-display {
   color: #6c757d;
   font-size: 0.95rem;
+}
+
+/* زر الطلاب في الهيدر */
+.btn-students-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #4361ee 0%, #3f37c9 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 14px rgba(67, 97, 238, 0.35);
+}
+
+.btn-students-header:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(67, 97, 238, 0.45);
+}
+
+.students-badge {
+  background: rgba(255, 255, 255, 0.3);
+  color: white;
+  border-radius: 20px;
+  padding: 2px 9px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-right: 2px;
+}
+
+/* لوحة الطلاب */
+.students-panel {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  border: 1px solid rgba(67, 97, 238, 0.1);
+}
+
+.students-panel-header {
+  background: linear-gradient(135deg, #4361ee 0%, #3f37c9 100%);
+  color: white;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.students-panel-header h6 {
+  font-weight: 600;
+}
+
+.btn-close-panel {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-close-panel:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.students-panel-body {
+  padding: 20px;
+}
+
+.no-students {
+  text-align: center;
+  padding: 30px;
+  color: #adb5bd;
+}
+
+.no-students i {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.students-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.student-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 12px 14px;
+  border: 1px solid #e9ecef;
+  transition: all 0.2s ease;
+}
+
+.student-chip:hover {
+  background: rgba(67, 97, 238, 0.05);
+  border-color: rgba(67, 97, 238, 0.2);
+}
+
+.student-chip-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4361ee 0%, #3f37c9 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.student-chip-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.student-chip-name {
+  font-weight: 600;
+  color: #1a1a2e;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.student-chip-email {
+  font-size: 0.75rem;
+  color: #6c757d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stats-card {

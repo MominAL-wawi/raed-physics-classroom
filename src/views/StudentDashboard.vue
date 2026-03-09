@@ -54,12 +54,39 @@
             >
               <div
                 class="exam-card"
-                :class="{ completed: hasCompletedExam(exam.id) }"
+                :class="{
+                  completed: hasCompletedExam(exam.firebaseKey || exam.id),
+                  'time-upcoming':
+                    !hasCompletedExam(exam.firebaseKey || exam.id) &&
+                    getExamTimeStatus(exam) === 'upcoming',
+                  'time-ended':
+                    !hasCompletedExam(exam.firebaseKey || exam.id) &&
+                    getExamTimeStatus(exam) === 'ended',
+                }"
               >
-                <div class="exam-status" v-if="hasCompletedExam(exam.id)">
+                <!-- شارة الحالة -->
+                <div
+                  class="exam-status completed-status"
+                  v-if="hasCompletedExam(exam.firebaseKey || exam.id)"
+                >
                   <i class="bi bi-check-circle-fill"></i>
                   مكتمل
                 </div>
+                <div
+                  class="exam-status upcoming-status"
+                  v-else-if="getExamTimeStatus(exam) === 'upcoming'"
+                >
+                  <i class="bi bi-hourglass-split"></i>
+                  لم يبدأ بعد
+                </div>
+                <div
+                  class="exam-status ended-status"
+                  v-else-if="getExamTimeStatus(exam) === 'ended'"
+                >
+                  <i class="bi bi-x-circle-fill"></i>
+                  انتهى
+                </div>
+
                 <div class="exam-icon">
                   <i class="bi bi-journal-bookmark-fill"></i>
                 </div>
@@ -78,19 +105,68 @@
                   </span>
                 </div>
 
-                <div v-if="hasCompletedExam(exam.id)" class="exam-result mt-3">
-                  <span class="result-badge" :class="getResultClass(exam.id)">
-                    النتيجة: {{ getExamResult(exam.id) }}%
-                  </span>
-                </div>
-                <router-link
-                  v-else
-                  :to="`/student/exam/${exam.id}`"
-                  class="btn-start-exam"
+                <!-- نافذة الوقت -->
+                <div
+                  v-if="exam.startDateTime || exam.endDateTime"
+                  class="exam-time-window"
                 >
-                  <i class="bi bi-play-fill me-1"></i>
-                  بدء الامتحان
-                </router-link>
+                  <div v-if="exam.startDateTime" class="time-row">
+                    <i class="bi bi-play-circle text-success"></i>
+                    <span>{{ formatDateTime(exam.startDateTime) }}</span>
+                  </div>
+                  <div v-if="exam.endDateTime" class="time-row">
+                    <i class="bi bi-stop-circle text-danger"></i>
+                    <span>{{ formatDateTime(exam.endDateTime) }}</span>
+                  </div>
+                </div>
+
+                <!-- نتيجة + مراجعة بعد الإكمال -->
+                <div
+                  v-if="hasCompletedExam(exam.firebaseKey || exam.id)"
+                  class="exam-result mt-3"
+                >
+                  <span
+                    class="result-badge"
+                    :class="getResultClass(exam.firebaseKey || exam.id)"
+                  >
+                    النتيجة: {{ getExamResult(exam.firebaseKey || exam.id) }}%
+                  </span>
+                  <router-link
+                    :to="`/student/results/review/${getExamResultId(
+                      exam.firebaseKey || exam.id
+                    )}`"
+                    class="btn-review-exam"
+                  >
+                    <i class="bi bi-eye me-1"></i>
+                    مراجعة
+                  </router-link>
+                </div>
+
+                <!-- زر البدء (مشروط بنافذة الوقت) -->
+                <template v-else>
+                  <router-link
+                    v-if="
+                      getExamTimeStatus(exam) === 'open' ||
+                      getExamTimeStatus(exam) === 'no-window'
+                    "
+                    :to="`/student/exam/${exam.firebaseKey || exam.id}`"
+                    class="btn-start-exam"
+                  >
+                    <i class="bi bi-play-fill me-1"></i>
+                    بدء الامتحان
+                  </router-link>
+                  <div
+                    v-else-if="getExamTimeStatus(exam) === 'upcoming'"
+                    class="btn-disabled-exam"
+                  >
+                    <i class="bi bi-lock-fill me-1"></i>
+                    يبدأ {{ formatDateTime(exam.startDateTime) }}
+                  </div>
+                  <div v-else class="btn-disabled-exam ended">
+                    <i class="bi bi-lock-fill me-1"></i>
+                    انتهت مدة التقديم
+                  </div>
+                </template>
               </div>
             </div>
           </div>
@@ -161,7 +237,8 @@ export default {
       ]);
     });
 
-    const availableExams = computed(() => examsStore.getActiveExams);
+    // عرض جميع الامتحانات النشطة (سواء مفتوحة أو لم تبدأ أو منتهية) ليرى الطالب الحالة
+    const availableExams = computed(() => examsStore.getAllActiveExams);
     const recentFiles = computed(() => filesStore.files.slice(-6));
 
     const completedExamsCount = computed(() => {
@@ -179,6 +256,13 @@ export default {
         (r) => r.examId === examId && r.studentEmail === authStore.user?.email
       );
       return result ? result.score : 0;
+    };
+
+    const getExamResultId = (examId) => {
+      const result = examsStore.results.find(
+        (r) => r.examId === examId && r.studentEmail === authStore.user?.email
+      );
+      return result ? result.firebaseKey || result.id : "";
     };
 
     const getResultClass = (examId) => {
@@ -206,6 +290,20 @@ export default {
       return new Date(dateString).toLocaleDateString("ar-SA");
     };
 
+    const getExamTimeStatus = (exam) => {
+      return examsStore.getExamTimeStatus(exam);
+    };
+
+    const formatDateTime = (dt) => {
+      if (!dt) return "";
+      return new Date(dt).toLocaleString("ar-SA", {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    };
+
     return {
       authStore,
       availableExams,
@@ -213,7 +311,10 @@ export default {
       completedExamsCount,
       hasCompletedExam,
       getExamResult,
+      getExamResultId,
       getResultClass,
+      getExamTimeStatus,
+      formatDateTime,
       getFileIcon,
       getFileIconClass,
       formatDate,
@@ -366,8 +467,6 @@ export default {
   position: absolute;
   top: 15px;
   left: 15px;
-  background: #06d6a0;
-  color: white;
   padding: 5px 12px;
   border-radius: 20px;
   font-size: 0.75rem;
@@ -375,6 +474,66 @@ export default {
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+.completed-status {
+  background: #06d6a0;
+  color: white;
+}
+.upcoming-status {
+  background: #f59e0b;
+  color: white;
+}
+.ended-status {
+  background: #ef476f;
+  color: white;
+}
+
+.exam-card.time-upcoming {
+  background: rgba(245, 158, 11, 0.06);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.exam-card.time-ended {
+  background: rgba(239, 71, 111, 0.05);
+  border-color: rgba(239, 71, 111, 0.2);
+  opacity: 0.85;
+}
+
+.exam-time-window {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 10px;
+}
+
+.time-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8rem;
+  color: #495057;
+}
+
+.btn-disabled-exam {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  background: #e9ecef;
+  color: #6c757d;
+  border-radius: 10px;
+  font-weight: 600;
+  text-align: center;
+  margin-top: 15px;
+  font-size: 0.9rem;
+}
+
+.btn-disabled-exam.ended {
+  background: rgba(239, 71, 111, 0.08);
+  color: #ef476f;
 }
 
 .exam-icon {
@@ -416,6 +575,25 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.btn-review-exam {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(67, 97, 238, 0.1);
+  color: #4361ee;
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  border: 1px solid rgba(67, 97, 238, 0.2);
+  transition: all 0.2s ease;
+}
+
+.btn-review-exam:hover {
+  background: #4361ee;
+  color: white;
 }
 
 .btn-start-exam {

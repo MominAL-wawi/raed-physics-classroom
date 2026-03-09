@@ -43,6 +43,14 @@
               <i class="bi bi-file-image me-1"></i>
               صور ({{ filesStore.getImageFiles.length }})
             </button>
+            <button
+              class="btn"
+              :class="filter === 'link' ? 'btn-primary' : 'btn-outline-primary'"
+              @click="filter = 'link'"
+            >
+              <i class="bi bi-link-45deg me-1"></i>
+              روابط ({{ filesStore.getLinkFiles.length }})
+            </button>
           </div>
         </div>
       </div>
@@ -94,7 +102,7 @@
                 </div>
 
                 <div class="mb-3">
-                  <label class="form-label">نوع الملف</label>
+                  <label class="form-label">نوع المحتوى</label>
                   <div class="btn-group w-100">
                     <button
                       type="button"
@@ -122,16 +130,42 @@
                       <i class="bi bi-file-image me-2"></i>
                       صورة
                     </button>
+                    <button
+                      type="button"
+                      class="btn"
+                      :class="
+                        uploadForm.type === 'link'
+                          ? 'btn-primary'
+                          : 'btn-outline-primary'
+                      "
+                      @click="uploadForm.type = 'link'"
+                    >
+                      <i class="bi bi-link-45deg me-2"></i>
+                      رابط
+                    </button>
                   </div>
                 </div>
 
-                <div class="mb-3">
+                <!-- حقل رفع ملف (PDF أو صورة) -->
+                <div class="mb-3" v-if="uploadForm.type !== 'link'">
                   <label class="form-label">اختر الملف</label>
                   <input
                     type="file"
                     class="form-control"
                     @change="handleFileSelect"
                     :accept="uploadForm.type === 'pdf' ? '.pdf' : 'image/*'"
+                    required
+                  />
+                </div>
+
+                <!-- حقل اللينك -->
+                <div class="mb-3" v-if="uploadForm.type === 'link'">
+                  <label class="form-label">رابط URL</label>
+                  <input
+                    type="url"
+                    class="form-control"
+                    v-model="uploadForm.linkUrl"
+                    placeholder="https://example.com"
                     required
                   />
                 </div>
@@ -152,12 +186,21 @@
                     type="button"
                     class="btn btn-secondary"
                     data-bs-dismiss="modal"
+                    :disabled="isUploading"
                   >
                     إلغاء
                   </button>
-                  <button type="submit" class="btn btn-primary-custom">
-                    <i class="bi bi-upload me-2"></i>
-                    رفع الملف
+                  <button
+                    type="submit"
+                    class="btn btn-primary-custom"
+                    :disabled="isUploading"
+                  >
+                    <span
+                      v-if="isUploading"
+                      class="spinner-border spinner-border-sm me-2"
+                    ></span>
+                    <i v-else class="bi bi-upload me-2"></i>
+                    {{ isUploading ? "جاري الرفع..." : "رفع الملف" }}
                   </button>
                 </div>
               </form>
@@ -173,6 +216,7 @@
 import { ref, computed, onMounted } from "vue";
 import { useAuthStore } from "@/store/authStore";
 import { useFilesStore } from "@/store/filesStore";
+import { firebaseDB } from "@/firebase/config";
 import FileCard from "@/components/FileCard.vue";
 import "bootstrap/dist/css/bootstrap.min.css";
 import * as bootstrap from "bootstrap";
@@ -194,6 +238,7 @@ export default {
       type: "pdf",
       url: "",
       preview: "",
+      linkUrl: "",
     });
 
     const isTeacher = computed(() => authStore.user?.role === "teacher");
@@ -217,27 +262,52 @@ export default {
       }
     };
 
+    const isUploading = ref(false);
+
     const uploadFile = async () => {
+      if (isUploading.value) return;
+      isUploading.value = true;
+
       try {
-        await filesStore.addFile({
+        const fileData = {
           name: uploadForm.value.name,
           type: uploadForm.value.type,
-          url: uploadForm.value.url,
-        });
+          url:
+            uploadForm.value.type === "link"
+              ? uploadForm.value.linkUrl
+              : uploadForm.value.url,
+        };
+
+        // حفظ اللينك في مسار links بالإضافة إلى files
+        if (uploadForm.value.type === "link") {
+          await firebaseDB.post("/links", {
+            title: uploadForm.value.name,
+            url: uploadForm.value.linkUrl,
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        await filesStore.addFile(fileData);
 
         // إغلاق Modal وإعادة تعيين النموذج
         const modal = document.getElementById("uploadModal");
         const bootstrapModal = bootstrap.Modal.getInstance(modal);
-        bootstrapModal.hide();
+        if (bootstrapModal) {
+          bootstrapModal.hide();
+        }
 
         uploadForm.value = {
           name: "",
           type: "pdf",
           url: "",
           preview: "",
+          linkUrl: "",
         };
       } catch (error) {
         console.error("Error uploading file:", error);
+        alert("حدث خطأ أثناء رفع الملف. يرجى المحاولة مرة أخرى.");
+      } finally {
+        isUploading.value = false;
       }
     };
 
@@ -253,6 +323,7 @@ export default {
       uploadForm,
       isTeacher,
       filteredFiles,
+      isUploading,
       handleFileSelect,
       uploadFile,
       deleteFile,

@@ -93,13 +93,24 @@
                   >
                 </div>
 
-                <div class="mt-3 pt-3 border-top">
+                <div
+                  class="mt-3 pt-3 border-top d-flex justify-content-between align-items-center"
+                >
                   <span
                     class="badge"
                     :class="getPerformanceBadge(result.score)"
                   >
                     {{ getPerformanceText(result.score) }}
                   </span>
+                  <router-link
+                    :to="`/student/results/review/${
+                      result.firebaseKey || result.id
+                    }`"
+                    class="btn-review"
+                  >
+                    <i class="bi bi-eye me-1"></i>
+                    مراجعة الإجابات
+                  </router-link>
                 </div>
               </div>
             </div>
@@ -194,6 +205,25 @@ export default {
 </script>
 
 <style scoped>
+.btn-review {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(67, 97, 238, 0.1);
+  color: #4361ee;
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(67, 97, 238, 0.2);
+}
+
+.btn-review:hover {
+  background: #4361ee;
+  color: white;
+}
+
 .result-badge {
   width: 60px;
   height: 60px;

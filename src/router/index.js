@@ -12,6 +12,7 @@ import TakeExamPage from "@/views/TakeExamPage.vue";
 import FilesPage from "@/views/FilesPage.vue";
 import ResultsPage from "@/views/ResultsPage.vue";
 import StudentResultsPage from "@/views/StudentResultsPage.vue";
+import ExamReviewPage from "@/views/ExamReviewPage.vue";
 
 const routes = [
   {
@@ -91,6 +92,12 @@ const routes = [
     path: "/student/results",
     name: "StudentResults",
     component: StudentResultsPage,
+    meta: { requiresAuth: true, role: "student" },
+  },
+  {
+    path: "/student/results/review/:resultId",
+    name: "ExamReview",
+    component: ExamReviewPage,
     meta: { requiresAuth: true, role: "student" },
   },
 ];

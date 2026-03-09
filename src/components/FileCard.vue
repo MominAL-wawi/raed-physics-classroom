@@ -1,13 +1,14 @@
 <template>
   <div class="file-card">
     <div class="file-icon" :class="file.type">
-      <i
-        :class="file.type === 'pdf' ? 'bi bi-file-pdf' : 'bi bi-file-image'"
-      ></i>
+      <i :class="fileIcon"></i>
     </div>
     <div class="file-info flex-grow-1">
       <h6 class="mb-1">{{ file.name }}</h6>
-      <small class="text-muted">{{ formatDate(file.uploadedAt) }}</small>
+      <small class="text-muted" v-if="file.type === 'link'">
+        <i class="bi bi-link-45deg me-1"></i>{{ file.url }}
+      </small>
+      <small class="text-muted" v-else>{{ formatDate(file.uploadedAt) }}</small>
     </div>
     <div class="file-actions">
       <a
@@ -15,8 +16,12 @@
         target="_blank"
         class="btn btn-sm btn-primary-custom me-2"
       >
-        <i class="bi bi-eye"></i>
-        عرض
+        <i
+          :class="
+            file.type === 'link' ? 'bi bi-box-arrow-up-right' : 'bi bi-eye'
+          "
+        ></i>
+        {{ file.type === "link" ? "فتح" : "عرض" }}
       </a>
       <button
         v-if="showDelete"
@@ -43,6 +48,14 @@ export default {
     },
   },
   emits: ["delete"],
+  computed: {
+    fileIcon() {
+      if (this.file.type === "pdf") return "bi bi-file-pdf";
+      if (this.file.type === "image") return "bi bi-file-image";
+      if (this.file.type === "link") return "bi bi-link-45deg";
+      return "bi bi-file";
+    },
+  },
   methods: {
     formatDate(date) {
       return new Date(date).toLocaleDateString("ar-SA", {

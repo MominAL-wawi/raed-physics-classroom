@@ -250,49 +250,31 @@ export default {
       return "تحتاج للمزيد من المذاكرة";
     });
 
-    const selectAnswer = async (answer) => {
+    // حفظ محلي فقط بدون Firebase - لا نرسل طلب عند كل إجابة
+    const selectAnswer = (answer) => {
       answers.value[currentQuestion.value.id] = answer;
-      // حفظ الإجابة مباشرة
-      await examsStore.saveAnswer(
-        exam.value.firebaseKey || exam.value.id,
-        authStore.user.email,
-        currentQuestion.value.id,
-        answer
-      );
+      // تحديث الـ store محلياً فقط
+      const examId = exam.value.firebaseKey || exam.value.id;
+      const key = `${examId}_${authStore.user.email}`;
+      if (examsStore.ongoingExams[key]) {
+        examsStore.ongoingExams[key].answers[currentQuestion.value.id] = answer;
+      }
     };
 
     const nextQuestion = () => {
       if (currentQuestionIndex.value < questions.value.length - 1) {
         currentQuestionIndex.value++;
-        // حفظ موقع السؤال الحالي
-        examsStore.saveCurrentQuestion(
-          exam.value.id,
-          authStore.user.email,
-          currentQuestionIndex.value
-        );
       }
     };
 
     const previousQuestion = () => {
       if (currentQuestionIndex.value > 0) {
         currentQuestionIndex.value--;
-        // حفظ موقع السؤال الحالي
-        examsStore.saveCurrentQuestion(
-          exam.value.id,
-          authStore.user.email,
-          currentQuestionIndex.value
-        );
       }
     };
 
     const goToQuestion = (index) => {
       currentQuestionIndex.value = index;
-      // حفظ موقع السؤال الحالي
-      examsStore.saveCurrentQuestion(
-        exam.value.id,
-        authStore.user.email,
-        index
-      );
     };
 
     const calculateScore = () => {
