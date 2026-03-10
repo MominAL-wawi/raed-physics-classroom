@@ -129,9 +129,20 @@
           v-else
           class="btn btn-success-custom btn-lg"
           @click="submitExam"
+          :disabled="isSubmitting"
         >
-          <i class="bi bi-check-lg me-2"></i>
-          إنهاء الامتحان
+          <span v-if="isSubmitting">
+            <span
+              class="spinner-border spinner-border-sm me-2"
+              role="status"
+              aria-hidden="true"
+            ></span>
+            جاري الإرسال...
+          </span>
+          <span v-else>
+            <i class="bi bi-check-lg me-2"></i>
+            إنهاء الامتحان
+          </span>
         </button>
       </div>
 
@@ -176,10 +187,10 @@
               أجبت على {{ correctAnswers }} من {{ questions.length }} سؤال بشكل
               صحيح
             </p>
-            <router-link to="/student" class="btn btn-primary-custom btn-lg">
+            <button @click="goToHome" class="btn btn-primary-custom btn-lg">
               <i class="bi bi-house me-2"></i>
               العودة للرئيسية
-            </router-link>
+            </button>
           </div>
         </div>
       </div>
@@ -212,6 +223,8 @@ export default {
     const score = ref(0);
     const correctAnswers = ref(0);
     const showLeaveWarning = ref(false);
+    const isSubmitting = ref(false);
+    const submitError = ref(null);
 
     const currentQuestion = computed(
       () => questions.value[currentQuestionIndex.value]
@@ -288,8 +301,19 @@ export default {
       score.value = Math.round((correct / questions.value.length) * 100);
     };
 
-    const submitExam = async () => {
-      clearInterval(timerInterval.value);
+    const submitExam = async (retryCount = 0) => {
+      // منع التقديم المتكرر
+      if (isSubmitting.value) return;
+
+      isSubmitting.value = true;
+      submitError.value = null;
+
+      // إيقاف المؤقت
+      if (timerInterval.value) {
+        clearInterval(timerInterval.value);
+        timerInterval.value = null;
+      }
+
       calculateScore();
 
       try {
@@ -305,17 +329,90 @@ export default {
           totalQuestions: questions.value.length,
         });
 
-        // عرض النتيجة
+        // عرض النتيجة بعد نجاح الحفظ
+        showResultModal();
+      } catch (error) {
+        console.error("Error submitting exam:", error);
+        submitError.value = error.message;
+
+        // إعادة المحاولة (بحد أقصى 3 مرات)
+        if (retryCount < 3) {
+          console.log(`Retrying submission... attempt ${retryCount + 1}`);
+          isSubmitting.value = false;
+          setTimeout(() => submitExam(retryCount + 1), 2000);
+        } else {
+          // فشل نهائي - عرض النتيجة على أي حال مع رسالة خطأ
+          alert(
+            "حدث خطأ أثناء حفظ النتيجة في السيرفر، لكن سيتم عرض نتيجتك. يرجى التواصل مع المعلم."
+          );
+          showResultModal();
+        }
+      }
+    };
+
+    const showResultModal = () => {
+      try {
         const modalEl = document.getElementById("resultModal");
         if (modalEl) {
+          // تنظيف أي modal موجود مسبقاً
+          const existingModal = bootstrap.Modal.getInstance(modalEl);
+          if (existingModal) {
+            existingModal.dispose();
+          }
           const modal = new bootstrap.Modal(modalEl);
           modal.show();
         }
+      } catch (modalError) {
+        console.error("Error showing modal:", modalError);
+        // إذا فشل عرض Modal، انتقل للصفحة الرئيسية مباشرة
+        router.push("/student");
+      } finally {
+        isSubmitting.value = false;
+      }
+    };
+
+    const goToHome = () => {
+      try {
+        // إغلاق الـ Modal بشكل صحيح قبل الانتقال
+        const modalEl = document.getElementById("resultModal");
+        if (modalEl) {
+          const modalInstance = bootstrap.Modal.getInstance(modalEl);
+          if (modalInstance) {
+            modalInstance.hide();
+            // انتظر حتى يتم إغلاق الـ Modal تماماً
+            modalEl.addEventListener(
+              "hidden.bs.modal",
+              () => {
+                modalInstance.dispose();
+                // إزالة backdrop يدوياً إذا لزم الأمر
+                const backdrop = document.querySelector(".modal-backdrop");
+                if (backdrop) {
+                  backdrop.remove();
+                }
+                document.body.classList.remove("modal-open");
+                document.body.style.removeProperty("overflow");
+                document.body.style.removeProperty("padding-right");
+                router.push("/student");
+              },
+              { once: true }
+            );
+          } else {
+            router.push("/student");
+          }
+        } else {
+          router.push("/student");
+        }
       } catch (error) {
-        console.error("Error submitting exam:", error);
-        alert("حدث خطأ أثناء إرسال الامتحان. سيتم إعادة المحاولة.");
-        // إعادة المحاولة
-        setTimeout(() => submitExam(), 2000);
+        console.error("Error closing modal:", error);
+        // تنظيف يدوي في حالة الخطأ
+        const backdrop = document.querySelector(".modal-backdrop");
+        if (backdrop) {
+          backdrop.remove();
+        }
+        document.body.classList.remove("modal-open");
+        document.body.style.removeProperty("overflow");
+        document.body.style.removeProperty("padding-right");
+        router.push("/student");
       }
     };
 
@@ -420,7 +517,7 @@ export default {
       if (timerInterval.value) {
         clearInterval(timerInterval.value);
       }
-      // إزالة مستمعات الأحداث
+      // إزالة مستمعا�� الأحداث
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     });
@@ -444,6 +541,8 @@ export default {
       previousQuestion,
       goToQuestion,
       submitExam,
+      isSubmitting,
+      goToHome,
     };
   },
 };

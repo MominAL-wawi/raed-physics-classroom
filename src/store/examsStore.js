@@ -258,11 +258,22 @@ export const useExamsStore = defineStore("exams", {
           submittedAt: new Date().toISOString(),
           ...result,
         };
+
+        // حفظ النتيجة أولاً
         const firebaseKey = await firebaseDB.post(DB_PATHS.RESULTS, newResult);
         const resultWithKey = { ...newResult, firebaseKey };
         this.results.push(resultWithKey);
 
-        await this.finishOngoingExam(result.examId, result.studentEmail);
+        // محاولة حذف الامتحان الجاري (لكن لا نفشل إذا لم ينجح)
+        try {
+          await this.finishOngoingExam(result.examId, result.studentEmail);
+        } catch (finishError) {
+          console.warn(
+            "Warning: Could not finish ongoing exam record:",
+            finishError
+          );
+          // نستمر لأن النتيجة تم حفظها بنجاح
+        }
 
         return resultWithKey;
       } catch (error) {
