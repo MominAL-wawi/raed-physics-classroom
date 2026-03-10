@@ -1,5 +1,15 @@
 <template>
   <div class="dashboard-container exam-secure-container">
+    <!-- تحذير أمني -->
+    <transition name="fade">
+      <div v-if="securityWarningVisible" class="security-warning-overlay">
+        <div class="security-warning-box">
+          <i class="bi bi-shield-exclamation"></i>
+          <p>{{ securityWarningMessage }}</p>
+        </div>
+      </div>
+    </transition>
+
     <div class="container">
       <!-- رأس الامتحان -->
       <div class="exam-header">
@@ -614,71 +624,233 @@ export default {
 
     // مرجع لتخزين event listeners للتنظيف لاحقاً
     const eventListeners = ref([]);
+    const securityWarningVisible = ref(false);
+    const securityWarningMessage = ref("");
+
+    // عرض تحذير أمني
+    const showSecurityWarning = (message) => {
+      securityWarningMessage.value = message;
+      securityWarningVisible.value = true;
+      setTimeout(() => {
+        securityWarningVisible.value = false;
+      }, 3000);
+    };
 
     // منع تصوير الشاشة وتسجيل الفيديو
     const preventScreenCapture = () => {
+      // إضافة CSS لمنع التقاط الشاشة (Content Protection)
+      const style = document.createElement("style");
+      style.id = "exam-protection-styles";
+      style.textContent = `
+        .exam-secure-container {
+          -webkit-user-select: none !important;
+          -moz-user-select: none !important;
+          -ms-user-select: none !important;
+          user-select: none !important;
+          -webkit-touch-callout: none !important;
+        }
+        
+        /* إخفاء المحتوى عند التقاط الشاشة في iOS/macOS */
+        @media screen and (-webkit-min-device-pixel-ratio: 0) {
+          .exam-secure-container {
+            -webkit-backdrop-filter: blur(0);
+          }
+        }
+        
+        /* منع الطباعة */
+        @media print {
+          .exam-secure-container * {
+            display: none !important;
+          }
+          body::after {
+            content: "طباعة الامتحان غير مسموحة" !important;
+            display: block !important;
+            font-size: 48px !important;
+            text-align: center !important;
+            padding: 100px !important;
+          }
+        }
+      `;
+      document.head.appendChild(style);
+
       // منع النسخ
       const copyHandler = (e) => {
         if (questions.value.length > 0) {
           e.preventDefault();
+          e.stopPropagation();
+          return false;
         }
       };
-      document.addEventListener("copy", copyHandler);
+      document.addEventListener("copy", copyHandler, true);
       eventListeners.value.push({ type: "copy", handler: copyHandler });
 
       // منع القص
       const cutHandler = (e) => {
         if (questions.value.length > 0) {
           e.preventDefault();
+          e.stopPropagation();
+          return false;
         }
       };
-      document.addEventListener("cut", cutHandler);
+      document.addEventListener("cut", cutHandler, true);
       eventListeners.value.push({ type: "cut", handler: cutHandler });
+
+      // منع اللصق
+      const pasteHandler = (e) => {
+        if (questions.value.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+      };
+      document.addEventListener("paste", pasteHandler, true);
+      eventListeners.value.push({ type: "paste", handler: pasteHandler });
 
       // منع النقر بالزر الأيمن
       const contextHandler = (e) => {
         if (questions.value.length > 0) {
           e.preventDefault();
+          e.stopPropagation();
+          return false;
         }
       };
-      document.addEventListener("contextmenu", contextHandler);
+      document.addEventListener("contextmenu", contextHandler, true);
       eventListeners.value.push({
         type: "contextmenu",
         handler: contextHandler,
+      });
+
+      // منع تحديد النص
+      const selectHandler = (e) => {
+        if (questions.value.length > 0) {
+          e.preventDefault();
+          window.getSelection()?.removeAllRanges();
+        }
+      };
+      document.addEventListener("selectstart", selectHandler, true);
+      eventListeners.value.push({
+        type: "selectstart",
+        handler: selectHandler,
       });
 
       // منع اختصارات لوحة المفاتيح للتصوير
       const keydownHandler = (e) => {
         if (questions.value.length > 0) {
           // منع Print Screen
-          if (e.key === "PrintScreen") {
+          if (e.key === "PrintScreen" || e.code === "PrintScreen") {
             e.preventDefault();
-            alert("تصوير الشاشة غير مسموح أثناء الامتحان");
+            e.stopPropagation();
+            // مسح الحافظة فوراً
+            navigator.clipboard?.writeText?.("");
+            showSecurityWarning("تصوير الشاشة غير مسموح أثناء الامتحان");
+            return false;
           }
           // منع Ctrl+P (طباعة)
-          if (e.ctrlKey && e.key === "p") {
+          if ((e.ctrlKey || e.metaKey) && (e.key === "p" || e.key === "P")) {
             e.preventDefault();
+            e.stopPropagation();
+            showSecurityWarning("الطباعة غير مسموحة أثناء الامتحان");
+            return false;
+          }
+          // منع Ctrl+S (حفظ)
+          if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
           }
           // منع Ctrl+Shift+S (لقطة شاشة في بعض المتصفحات)
-          if (e.ctrlKey && e.shiftKey && e.key === "s") {
+          if (
+            (e.ctrlKey || e.metaKey) &&
+            e.shiftKey &&
+            (e.key === "s" || e.key === "S")
+          ) {
             e.preventDefault();
+            e.stopPropagation();
+            showSecurityWarning("تصوير الشاشة غير مسموح أثناء الامتحان");
+            return false;
           }
-          // منع Cmd+Shift+3 و Cmd+Shift+4 (Mac screenshots)
-          if (e.metaKey && e.shiftKey && (e.key === "3" || e.key === "4")) {
+          // منع Cmd+Shift+3 و Cmd+Shift+4 و Cmd+Shift+5 (Mac screenshots)
+          if (e.metaKey && e.shiftKey && ["3", "4", "5"].includes(e.key)) {
             e.preventDefault();
+            e.stopPropagation();
+            showSecurityWarning("تصوير الشاشة غير مسموح أثناء الامتحان");
+            return false;
+          }
+          // منع Win+Shift+S (Windows Snipping Tool)
+          if (e.metaKey && e.shiftKey && (e.key === "s" || e.key === "S")) {
+            e.preventDefault();
+            e.stopPropagation();
+            showSecurityWarning("تصوير الشاشة غير مسموح أثناء الامتحان");
+            return false;
+          }
+          // منع Win+G (Windows Game Bar للتسجيل)
+          if (e.metaKey && (e.key === "g" || e.key === "G")) {
+            e.preventDefault();
+            e.stopPropagation();
+            showSecurityWarning("تسجيل الشاشة غير مسموح أثناء الامتحان");
+            return false;
           }
           // منع Ctrl+Shift+I (Developer Tools)
-          if (e.ctrlKey && e.shiftKey && e.key === "I") {
+          if (
+            (e.ctrlKey || e.metaKey) &&
+            e.shiftKey &&
+            (e.key === "I" || e.key === "i")
+          ) {
             e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+          // منع Ctrl+Shift+J (Console)
+          if (
+            (e.ctrlKey || e.metaKey) &&
+            e.shiftKey &&
+            (e.key === "J" || e.key === "j")
+          ) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+          // منع Ctrl+U (View Source)
+          if ((e.ctrlKey || e.metaKey) && (e.key === "u" || e.key === "U")) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
           }
           // منع F12 (Developer Tools)
           if (e.key === "F12") {
             e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+          // منع Ctrl+C (نسخ)
+          if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "C")) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }
+          // منع Ctrl+A (تحديد الكل)
+          if ((e.ctrlKey || e.metaKey) && (e.key === "a" || e.key === "A")) {
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
           }
         }
       };
-      document.addEventListener("keydown", keydownHandler);
+      document.addEventListener("keydown", keydownHandler, true);
       eventListeners.value.push({ type: "keydown", handler: keydownHandler });
+
+      // منع keyup لـ PrintScreen أيضاً
+      const keyupHandler = (e) => {
+        if (
+          questions.value.length > 0 &&
+          (e.key === "PrintScreen" || e.code === "PrintScreen")
+        ) {
+          // مسح الحافظة عند رفع زر PrintScreen
+          navigator.clipboard?.writeText?.("");
+        }
+      };
+      document.addEventListener("keyup", keyupHandler, true);
+      eventListeners.value.push({ type: "keyup", handler: keyupHandler });
 
       // محاولة منع تسجيل الشاشة عبر CSS
       const examContainer = document.querySelector(".exam-secure-container");
@@ -699,10 +871,26 @@ export default {
           navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
         navigator.mediaDevices.getDisplayMedia = async function (constraints) {
           if (questions.value.length > 0) {
-            alert("تسجيل الشاشة غير مسموح أثناء الامتحان");
+            showSecurityWarning("تسجيل/مشاركة الشاشة غير مسموح أثناء الامتحان");
             throw new Error("Screen recording is not allowed during exam");
           }
           return originalGetDisplayMedia(constraints);
+        };
+      }
+
+      // منع getUserMedia للكاميرا/الميكروفون أثناء الامتحان
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const originalGetUserMedia = navigator.mediaDevices.getUserMedia.bind(
+          navigator.mediaDevices
+        );
+        navigator.mediaDevices.getUserMedia = async function (constraints) {
+          if (questions.value.length > 0 && constraints.video) {
+            showSecurityWarning(
+              "استخدام الكاميرا للتسجيل غير مسموح أثناء الامتحان"
+            );
+            throw new Error("Camera recording is not allowed during exam");
+          }
+          return originalGetUserMedia(constraints);
         };
       }
 
@@ -718,6 +906,106 @@ export default {
         );
       }
 
+      // الكشف عن Picture-in-Picture
+      if ("pictureInPictureEnabled" in document) {
+        document.addEventListener("enterpictureinpicture", () => {
+          if (questions.value.length > 0) {
+            document.exitPictureInPicture?.();
+            showSecurityWarning("وضع صورة في صورة غير مسموح أثناء الامتحان");
+          }
+        });
+      }
+
+      // مراقبة فتح DevTools
+      const devToolsDetector = () => {
+        const threshold = 160;
+        const widthThreshold =
+          window.outerWidth - window.innerWidth > threshold;
+        const heightThreshold =
+          window.outerHeight - window.innerHeight > threshold;
+
+        if (widthThreshold || heightThreshold) {
+          if (questions.value.length > 0) {
+            showSecurityWarning("يرجى إغلاق أدوات المطور أثناء الامتحان");
+          }
+        }
+      };
+
+      // فحص DevTools كل ثانية
+      const devToolsInterval = setInterval(devToolsDetector, 1000);
+
+      // تخزين interval للتنظيف لاحقاً
+      eventListeners.value.push({
+        type: "interval",
+        handler: devToolsInterval,
+      });
+
+      // تعتيم المحتوى عند فقدان التركيز (الخروج من النافذة)
+      const blurHandler = () => {
+        if (questions.value.length > 0) {
+          const container = document.querySelector(".exam-secure-container");
+          if (container) {
+            container.classList.add("blurred-content");
+          }
+          showSecurityWarning("يرجى البقاء في صفحة الامتحان");
+        }
+      };
+
+      const focusHandler = () => {
+        const container = document.querySelector(".exam-secure-container");
+        if (container) {
+          container.classList.remove("blurred-content");
+        }
+      };
+
+      window.addEventListener("blur", blurHandler);
+      window.addEventListener("focus", focusHandler);
+      eventListeners.value.push({
+        type: "blur",
+        handler: blurHandler,
+        target: window,
+      });
+      eventListeners.value.push({
+        type: "focus",
+        handler: focusHandler,
+        target: window,
+      });
+
+      // مراقبة الحافظة ومسحها باستمرار أثناء الامتحان
+      const clipboardInterval = setInterval(() => {
+        if (questions.value.length > 0) {
+          navigator.clipboard?.writeText?.("").catch(() => {});
+        }
+      }, 500);
+      eventListeners.value.push({
+        type: "interval",
+        handler: clipboardInterval,
+      });
+
+      // منع Drag & Drop للصور والنصوص
+      const dragStartHandler = (e) => {
+        if (questions.value.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          return false;
+        }
+      };
+      document.addEventListener("dragstart", dragStartHandler, true);
+      eventListeners.value.push({
+        type: "dragstart",
+        handler: dragStartHandler,
+      });
+
+      // منع فتح روابط جديدة
+      const clickHandler = (e) => {
+        if (questions.value.length > 0 && e.target.tagName === "A") {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      };
+      document.addEventListener("click", clickHandler, true);
+      eventListeners.value.push({ type: "click", handler: clickHandler });
+
       // منع السحب والإفلات للصور
       const dragHandler = (e) => {
         if (questions.value.length > 0) {
@@ -730,10 +1018,30 @@ export default {
 
     // تنظيف event listeners عند مغادرة الصفحة
     const cleanupEventListeners = () => {
-      eventListeners.value.forEach(({ type, handler }) => {
-        document.removeEventListener(type, handler);
+      eventListeners.value.forEach(({ type, handler, target }) => {
+        if (type === "interval") {
+          clearInterval(handler);
+        } else if (target === window) {
+          window.removeEventListener(type, handler);
+        } else {
+          document.removeEventListener(type, handler, true);
+        }
       });
       eventListeners.value = [];
+
+      // إزالة أنماط الحماية
+      const protectionStyles = document.getElementById(
+        "exam-protection-styles"
+      );
+      if (protectionStyles) {
+        protectionStyles.remove();
+      }
+
+      // إزالة تعتيم المحتوى
+      const container = document.querySelector(".exam-secure-container");
+      if (container) {
+        container.classList.remove("blurred-content");
+      }
     };
 
     onMounted(async () => {
@@ -886,6 +1194,8 @@ export default {
       showLeaveWarning,
       isOffline,
       hasPendingSubmission,
+      securityWarningVisible,
+      securityWarningMessage,
       selectAnswer,
       nextQuestion,
       previousQuestion,
@@ -1108,23 +1418,139 @@ export default {
   color: white;
 }
 
-/* حماية من تصوير الشاشة */
+/* حماية متقدمة من تصوير الشاشة */
 .exam-secure-container {
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+  /* حماية DRM-like للمحتوى */
+  -webkit-user-drag: none !important;
+  pointer-events: auto;
+}
+
+/* منع تحديد أي نص داخل الحاوية */
+.exam-secure-container * {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
 }
 
 /* CSS لمنع التقاط الشاشة (يعمل على بعض المتصفحات) */
 @media print {
-  .exam-secure-container {
+  .exam-secure-container,
+  .exam-secure-container * {
     display: none !important;
+    visibility: hidden !important;
+  }
+  body::before {
+    content: "طباعة الامتحان غير مسموحة - Printing is not allowed" !important;
+    display: block !important;
+    font-size: 36px !important;
+    text-align: center !important;
+    padding: 200px 50px !important;
+    color: #dc3545 !important;
+    font-weight: bold !important;
   }
 }
 
 /* إخفاء المحتوى عند محاولة التسجيل (Picture-in-Picture) */
 .exam-secure-container:fullscreen {
   background: black;
+}
+
+/* تعتيم عند فقدان التركيز */
+.exam-secure-container.blurred-content .question-card,
+.exam-secure-container.blurred-content .card {
+  filter: blur(20px) !important;
+  pointer-events: none !important;
+  transition: filter 0.1s ease !important;
+}
+
+.exam-secure-container.blurred-content::after {
+  content: "يرجى العودة للامتحان - الخروج غير مسموح";
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(220, 53, 69, 0.95);
+  color: white;
+  padding: 30px 50px;
+  border-radius: 15px;
+  font-size: 24px;
+  font-weight: bold;
+  z-index: 10000;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* تحذير أمني */
+.security-warning-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(220, 53, 69, 0.95);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.security-warning-box {
+  background: white;
+  padding: 40px 60px;
+  border-radius: 20px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: shake 0.5s ease-in-out;
+}
+
+.security-warning-box i {
+  font-size: 80px;
+  color: #dc3545;
+  margin-bottom: 20px;
+  display: block;
+}
+
+.security-warning-box p {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0;
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-10px);
+  }
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(10px);
+  }
+}
+
+/* انتقالات */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

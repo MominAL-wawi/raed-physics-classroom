@@ -1,52 +1,29 @@
 <template>
   <div class="dashboard-container py-4">
     <div class="container">
-      <h2
-        class="mb-4 page-title d-flex align-items-center justify-content-between"
+      <!-- Header -->
+      <div
+        class="page-header d-flex align-items-center justify-content-between mb-4"
       >
-        <span> <i class="bi bi-bar-chart me-2"></i>نتائج الطلاب </span>
-        <span class="realtime-indicator" title="تحديث تلقائي كل 3 ثواني">
+        <h2 class="page-title mb-0">
+          <i class="bi bi-bar-chart me-2"></i>نتائج الطلاب
+        </h2>
+        <span class="realtime-indicator">
           <i class="bi bi-broadcast me-1"></i>
           <small>تحديث مباشر</small>
         </span>
-      </h2>
+      </div>
 
-      <!-- فلتر حسب الامتحان -->
-      <div class="section-card mb-4">
-        <div class="card-body">
-          <div class="row align-items-end gap-3">
-            <div class="col-md-6">
-              <label class="form-label">فلتر حسب الامتحان</label>
-              <select class="form-select" v-model="selectedExam">
-                <option value="">جميع الامتحانات</option>
-                <option
-                  v-for="exam in examsStore.exams"
-                  :key="exam.id"
-                  :value="exam.id"
-                >
-                  {{ exam.title }}
-                </option>
-              </select>
-            </div>
-            <div
-              class="col-md-4"
-              v-if="selectedExam && filteredResults.length > 0"
-            >
-              <button
-                class="btn btn-outline-danger"
-                @click="deleteAllExamResults"
-                :disabled="isDeleting"
-              >
-                <i class="bi bi-trash me-2"></i>
-                حذف جميع نتائج هذا الامتحان
-              </button>
-            </div>
-          </div>
+      <!-- Loading -->
+      <div v-if="isLoadingRealtime" class="section-card mb-4">
+        <div class="card-body text-center py-5">
+          <div class="spinner-border text-primary" role="status"></div>
+          <p class="mt-3 text-muted">جاري تحميل النتائج...</p>
         </div>
       </div>
 
-      <!-- جدول النتائج -->
-      <div v-if="filteredResults.length === 0" class="section-card">
+      <!-- لا توجد امتحانات -->
+      <div v-else-if="examsWithResults.length === 0" class="section-card">
         <div class="card-body">
           <div class="empty-state">
             <i class="bi bi-clipboard-x"></i>
@@ -56,100 +33,134 @@
         </div>
       </div>
 
-      <div v-else class="section-card">
-        <div class="card-body p-0">
-          <div class="table-responsive">
-            <table class="table table-custom mb-0">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>اسم الطالب</th>
-                  <th>البريد الإلكتروني</th>
-                  <th>الامتحان</th>
-                  <th>النتيجة</th>
-                  <th>الإجابات الصحيحة</th>
-                  <th>التاريخ</th>
-                  <th>إجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="(result, index) in filteredResults"
-                  :key="result.id || result.firebaseKey"
-                >
-                  <td>{{ index + 1 }}</td>
-                  <td>{{ result.studentName }}</td>
-                  <td class="email-cell">{{ result.studentEmail }}</td>
-                  <td>{{ result.examTitle }}</td>
-                  <td>
-                    <span
-                      class="badge"
-                      :class="getScoreBadgeClass(result.score)"
-                    >
-                      {{ result.score }}%
-                    </span>
-                  </td>
-                  <td>
-                    {{ result.correctAnswers }} / {{ result.totalQuestions }}
-                  </td>
-                  <td class="date-cell">
-                    {{ formatDate(result.submittedAt) }}
-                  </td>
-                  <td>
-                    <div class="btn-group btn-group-sm">
-                      <button
-                        class="btn btn-outline-primary"
-                        @click="resetExamForStudent(result)"
-                        :disabled="isDeleting"
-                        title="إعادة الامتحان للطالب"
-                      >
-                        <i class="bi bi-arrow-repeat"></i>
-                      </button>
-                      <button
-                        class="btn btn-outline-danger"
-                        @click="deleteResult(result)"
-                        :disabled="isDeleting"
-                        title="حذف النتيجة"
-                      >
-                        <i class="bi bi-trash"></i>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+      <!-- بطاقة لكل امتحان -->
+      <div
+        v-else
+        v-for="examGroup in examsWithResults"
+        :key="examGroup.examId"
+        class="exam-results-card mb-4"
+      >
+        <!-- رأس البطاقة -->
+        <div
+          class="exam-card-header d-flex align-items-center justify-content-between flex-wrap gap-3"
+        >
+          <div class="d-flex align-items-center gap-3">
+            <div class="exam-icon">
+              <i class="bi bi-journal-text"></i>
+            </div>
+            <div>
+              <h5 class="exam-title mb-0">{{ examGroup.examTitle }}</h5>
+              <span class="participants-badge">
+                <i class="bi bi-people me-1"></i>
+                {{ examGroup.results.length }} طالب
+              </span>
+            </div>
           </div>
-        </div>
-      </div>
 
-      <!-- إحصائيات -->
-      <div v-if="filteredResults.length > 0" class="row mt-4">
-        <div class="col-md-4 mb-3">
-          <div class="stats-card">
-            <div class="icon primary">
-              <i class="bi bi-people"></i>
+          <!-- إحصائيات + زر PDF -->
+          <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div class="stat-pill">
+              <span class="stat-label">متوسط</span>
+              <span class="stat-value primary">{{ examGroup.avg }}%</span>
             </div>
-            <h3>{{ filteredResults.length }}</h3>
-            <p>إجمالي المشاركين</p>
+            <div class="stat-pill">
+              <span class="stat-label">أعلى</span>
+              <span class="stat-value success">{{ examGroup.highest }}%</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-label">أدنى</span>
+              <span class="stat-value danger">{{ examGroup.lowest }}%</span>
+            </div>
+            <button
+              class="btn btn-excel"
+              @click="downloadExamResultsPDF(examGroup)"
+              :disabled="downloadingExamId === examGroup.examId"
+            >
+              <i class="bi bi-file-earmark-excel me-1"></i>
+              {{
+                downloadingExamId === examGroup.examId
+                  ? "جاري..."
+                  : "تحميل Excel"
+              }}
+            </button>
+            <button
+              class="btn btn-delete-exam"
+              @click="
+                deleteAllExamResults(examGroup.examId, examGroup.examTitle)
+              "
+              :disabled="deletingExamId === examGroup.examId"
+            >
+              <i class="bi bi-trash"></i>
+            </button>
           </div>
         </div>
-        <div class="col-md-4 mb-3">
-          <div class="stats-card">
-            <div class="icon success">
-              <i class="bi bi-graph-up"></i>
-            </div>
-            <h3>{{ averageScore }}%</h3>
-            <p>متوسط النتائج</p>
-          </div>
-        </div>
-        <div class="col-md-4 mb-3">
-          <div class="stats-card">
-            <div class="icon warning">
-              <i class="bi bi-trophy"></i>
-            </div>
-            <h3>{{ highestScore }}%</h3>
-            <p>أعلى نتيجة</p>
-          </div>
+
+        <!-- جدول النتائج -->
+        <div class="table-responsive">
+          <table class="table table-custom mb-0">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>اسم الطالب</th>
+                <th>البريد الإلكتروني</th>
+                <th>النتيجة</th>
+                <th>الإجابات الصحيحة</th>
+                <th>التاريخ</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(result, index) in examGroup.results"
+                :key="result.firebaseKey || result.id"
+              >
+                <td>{{ index + 1 }}</td>
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="student-avatar">
+                      {{ result.studentName?.charAt(0) || "ط" }}
+                    </div>
+                    {{ result.studentName }}
+                  </div>
+                </td>
+                <td class="email-cell">{{ result.studentEmail }}</td>
+                <td>
+                  <span
+                    class="score-badge"
+                    :class="getScoreBadgeClass(result.score)"
+                  >
+                    {{ result.score }}%
+                  </span>
+                </td>
+                <td>
+                  <span class="answers-cell">
+                    {{ result.correctAnswers }} / {{ result.totalQuestions }}
+                  </span>
+                </td>
+                <td class="date-cell">{{ formatDate(result.submittedAt) }}</td>
+                <td>
+                  <div class="d-flex gap-1">
+                    <button
+                      class="btn btn-icon btn-reset"
+                      @click="resetExamForStudent(result)"
+                      :disabled="deletingResultKey === result.firebaseKey"
+                      title="إعادة الامتحان للطالب"
+                    >
+                      <i class="bi bi-arrow-repeat"></i>
+                    </button>
+                    <button
+                      class="btn btn-icon btn-del"
+                      @click="deleteResult(result)"
+                      :disabled="deletingResultKey === result.firebaseKey"
+                      title="حذف النتيجة"
+                    >
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -157,234 +168,242 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useExamsStore } from "@/store/examsStore";
+import * as XLSX from "xlsx";
 
-// Firebase Realtime Database URL
 const DATABASE_URL = "https://studyphysics-bd79d-default-rtdb.firebaseio.com/";
 
 export default {
   name: "ResultsPage",
   setup() {
     const examsStore = useExamsStore();
-    const selectedExam = ref("");
-    const isDeleting = ref(false);
-    const realtimeResults = ref({});
-    const eventSources = ref({});
     const isLoadingRealtime = ref(false);
+    const downloadingExamId = ref(null);
+    const deletingExamId = ref(null);
+    const deletingResultKey = ref(null);
+    let pollInterval = null;
 
-    // دالة لبدء الاستماع للتحديثات الفورية لامتحان معين
-    const startRealtimeListener = (examId) => {
-      // إذا كان هناك listener موجود لهذا الامتحان، لا نضيف آخر
-      if (eventSources.value[examId]) {
-        return;
-      }
-
-      // استخدام EventSource للاستماع للتحديثات الفورية من Firebase
-      // const url = `${DATABASE_URL}results.json?orderBy="examId"&equalTo="${examId}"`;
-
-      // بدء polling كل 3 ثواني للحصول على التحديثات الفورية
-      const pollInterval = setInterval(async () => {
-        try {
-          const response = await fetch(`${DATABASE_URL}results.json`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data) {
-              // تحويل البيانات وتحديث النتائج
-              const allResults = Object.entries(data).map(([key, value]) => ({
-                ...value,
-                firebaseKey: key,
-              }));
-
-              // تحديث نتائج الامتحان المحدد
-              realtimeResults.value[examId] = allResults.filter(
-                (r) => r.examId === examId
-              );
-
-              // تحديث الـ store أيضاً
-              examsStore.results = allResults;
-            }
-          }
-        } catch (error) {
-          console.error("Error fetching realtime results:", error);
-        }
-      }, 3000);
-
-      eventSources.value[examId] = pollInterval;
-    };
-
-    // إيقاف الاستماع لامتحان معين
-    const stopRealtimeListener = (examId) => {
-      if (eventSources.value[examId]) {
-        clearInterval(eventSources.value[examId]);
-        delete eventSources.value[examId];
-      }
-    };
-
-    // إيقاف جميع المستمعين
-    const stopAllRealtimeListeners = () => {
-      Object.keys(eventSources.value).forEach((examId) => {
-        clearInterval(eventSources.value[examId]);
-      });
-      eventSources.value = {};
-    };
-
-    // مراقبة تغيير الامتحان المحدد لبدء/إيقاف الاستماع
-    watch(selectedExam, (newExamId, oldExamId) => {
-      // إيقاف الاستماع للامتحان القديم
-      if (oldExamId) {
-        stopRealtimeListener(oldExamId);
-      }
-      // بدء الاستماع للامتحان الجديد
-      if (newExamId) {
-        startRealtimeListener(newExamId);
-      }
-    });
-
-    // تحميل البيانات من Firebase عند تحميل الصفحة
+    // تحميل البيانات وبدء polling
     onMounted(async () => {
       isLoadingRealtime.value = true;
       await Promise.all([examsStore.loadExams(), examsStore.loadResults()]);
       isLoadingRealtime.value = false;
 
-      // بدء التحديث الفوري للكل إذا لم يكن هناك امتحان محدد
-      if (!selectedExam.value) {
-        // polling عام لجميع النتائج
-        const globalPollInterval = setInterval(async () => {
-          try {
-            const response = await fetch(`${DATABASE_URL}results.json`);
-            if (response.ok) {
-              const data = await response.json();
-              if (data) {
-                const allResults = Object.entries(data).map(([key, value]) => ({
-                  ...value,
-                  firebaseKey: key,
-                }));
-                examsStore.results = allResults;
-              }
+      pollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`${DATABASE_URL}results.json`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data) {
+              examsStore.results = Object.entries(data).map(([key, value]) => ({
+                ...value,
+                firebaseKey: key,
+              }));
+            } else {
+              examsStore.results = [];
             }
-          } catch (error) {
-            console.error("Error fetching realtime results:", error);
           }
-        }, 3000);
-        eventSources.value["global"] = globalPollInterval;
-      }
+        } catch (e) {
+          // silent fail
+        }
+      }, 3000);
     });
 
-    // تنظيف المستمعين عند مغادرة الصفحة
     onUnmounted(() => {
-      stopAllRealtimeListeners();
+      if (pollInterval) clearInterval(pollInterval);
     });
 
-    const filteredResults = computed(() => {
-      if (!selectedExam.value) return examsStore.results;
-      return examsStore.getResultsByExam(selectedExam.value);
-    });
+    // تجميع النتائج حسب كل امتحان
+    const examsWithResults = computed(() => {
+      const grouped = {};
 
-    const averageScore = computed(() => {
-      if (filteredResults.value.length === 0) return 0;
-      const sum = filteredResults.value.reduce((acc, r) => acc + r.score, 0);
-      return Math.round(sum / filteredResults.value.length);
-    });
+      examsStore.results.forEach((result) => {
+        const eid = result.examId;
+        if (!grouped[eid]) {
+          const exam = examsStore.exams.find(
+            (e) => e.firebaseKey === eid || e.id === eid
+          );
+          grouped[eid] = {
+            examId: eid,
+            examTitle: result.examTitle || exam?.title || "امتحان غير معروف",
+            results: [],
+          };
+        }
+        grouped[eid].results.push(result);
+      });
 
-    const highestScore = computed(() => {
-      if (filteredResults.value.length === 0) return 0;
-      return Math.max(...filteredResults.value.map((r) => r.score));
+      // احسب إحصائيات لكل مجموعة
+      return Object.values(grouped).map((g) => {
+        const scores = g.results.map((r) => r.score);
+        const avg = scores.length
+          ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
+          : 0;
+        const highest = scores.length ? Math.max(...scores) : 0;
+        const lowest = scores.length ? Math.min(...scores) : 0;
+        return { ...g, avg, highest, lowest };
+      });
     });
 
     const getScoreBadgeClass = (score) => {
-      if (score >= 90) return "bg-success";
-      if (score >= 70) return "bg-primary";
-      if (score >= 50) return "bg-warning";
-      return "bg-danger";
+      if (score >= 90) return "excellent";
+      if (score >= 70) return "good";
+      if (score >= 50) return "average";
+      return "poor";
     };
 
-    const formatDate = (date) => {
-      return new Date(date).toLocaleDateString("ar-SA", {
+    const formatDate = (date) =>
+      new Date(date).toLocaleDateString("ar-SA", {
         year: "numeric",
         month: "short",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
       });
-    };
 
     // حذف نتيجة واحدة
     const deleteResult = async (result) => {
       if (!confirm(`هل أنت متأكد من حذف نتيجة ${result.studentName}؟`)) return;
-
-      isDeleting.value = true;
+      deletingResultKey.value = result.firebaseKey;
       try {
         await examsStore.deleteResult(result.firebaseKey);
-      } catch (error) {
+      } catch {
         alert("حدث خطأ أثناء حذف النتيجة");
       } finally {
-        isDeleting.value = false;
+        deletingResultKey.value = null;
       }
     };
 
-    // إعادة الامتحان لطالب معين
+    // إعادة الامتحان لطالب
     const resetExamForStudent = async (result) => {
       if (
         !confirm(
-          `هل أنت ��تأكد من إعادة الامتحان للطالب ${result.studentName}؟\nسيتم حذف نتيجته الحالية وسيتمكن من إعادة الامتحان.`
+          `هل أنت متأكد من إعادة الامتحان للطالب ${result.studentName}؟\nسيتم حذف نتيجته الحالية.`
         )
       )
         return;
-
-      isDeleting.value = true;
+      deletingResultKey.value = result.firebaseKey;
       try {
         await examsStore.resetExamForStudent(
           result.examId,
           result.studentEmail
         );
-        alert(`تم إعادة الامتحان للطالب ${result.studentName} بنجاح`);
-      } catch (error) {
+      } catch {
         alert("حدث خطأ أثناء إعادة الامتحان");
       } finally {
-        isDeleting.value = false;
+        deletingResultKey.value = null;
       }
     };
 
-    // حذف جميع نتائج امتحان معين
-    const deleteAllExamResults = async () => {
-      const exam = examsStore.exams.find(
-        (e) =>
-          e.id === selectedExam.value || e.firebaseKey === selectedExam.value
-      );
-      const examTitle = exam?.title || "هذا الامتحان";
-
+    // حذف جميع نتائج امتحان
+    const deleteAllExamResults = async (examId, examTitle) => {
       if (
         !confirm(
-          `هل أنت متأكد من حذف جميع نتائج "${examTitle}"؟ لا يمكن التراجع عن هذا الإجراء.`
+          `هل أنت متأكد من حذف جميع نتائج "${examTitle}"؟ لا يمكن التراجع.`
         )
       )
         return;
-
-      isDeleting.value = true;
+      deletingExamId.value = examId;
       try {
-        await examsStore.deleteResultsByExam(selectedExam.value);
-        selectedExam.value = "";
-      } catch (error) {
+        await examsStore.deleteResultsByExam(examId);
+      } catch {
         alert("حدث خطأ أثناء حذف النتائج");
       } finally {
-        isDeleting.value = false;
+        deletingExamId.value = null;
+      }
+    };
+
+    // تحميل Excel لامتحان معين
+    const downloadExamResultsPDF = (examGroup) => {
+      downloadingExamId.value = examGroup.examId;
+
+      try {
+        // بناء بيانات الجدول
+        const header = [
+          [
+            "#",
+            "اسم الطالب",
+            "البريد الإلكتروني",
+            "النتيجة (%)",
+            "الإجابات الصحيحة",
+            "إجمالي الأسئلة",
+            "التاريخ",
+          ],
+        ];
+
+        const rows = examGroup.results.map((r, i) => [
+          i + 1,
+          r.studentName || "",
+          r.studentEmail || "",
+          r.score,
+          r.correctAnswers,
+          r.totalQuestions,
+          formatDate(r.submittedAt),
+        ]);
+
+        // صف الإحصائيات
+        const statsRows = [
+          [],
+          ["إحصائيات الامتحان"],
+          ["عدد المشاركين", examGroup.results.length],
+          ["المتوسط", `${examGroup.avg}%`],
+          ["أعلى نتيجة", `${examGroup.highest}%`],
+          ["أدنى نتيجة", `${examGroup.lowest}%`],
+        ];
+
+        const allData = [
+          [`نتائج امتحان: ${examGroup.examTitle}`],
+          [`تاريخ التقرير: ${new Date().toLocaleDateString("ar-SA")}`],
+          [],
+          ...header,
+          ...rows,
+          ...statsRows,
+        ];
+
+        // إنشاء ورقة العمل
+        const ws = XLSX.utils.aoa_to_sheet(allData);
+
+        // ضبط عرض الأعمدة
+        ws["!cols"] = [
+          { wch: 5 },
+          { wch: 25 },
+          { wch: 30 },
+          { wch: 12 },
+          { wch: 18 },
+          { wch: 16 },
+          { wch: 22 },
+        ];
+
+        // إنشاء الكتاب
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "النتائج");
+
+        // تحميل الملف
+        const fileName = `نتائج_${examGroup.examTitle.replace(
+          /\s+/g,
+          "_"
+        )}_${new Date().toLocaleDateString("ar-SA").replace(/\//g, "-")}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+      } catch (e) {
+        alert("حدث خطأ أثناء إنشاء ملف Excel");
+      } finally {
+        downloadingExamId.value = null;
       }
     };
 
     return {
       examsStore,
-      selectedExam,
-      filteredResults,
-      averageScore,
-      highestScore,
+      isLoadingRealtime,
+      downloadingExamId,
+      deletingExamId,
+      deletingResultKey,
+      examsWithResults,
       getScoreBadgeClass,
       formatDate,
       deleteResult,
       resetExamForStudent,
       deleteAllExamResults,
-      isDeleting,
-      isLoadingRealtime,
+      downloadExamResultsPDF,
     };
   },
 };
@@ -392,6 +411,7 @@ export default {
 
 <style scoped>
 .page-title {
+  font-size: 1.6rem;
   font-weight: 700;
 }
 
@@ -400,7 +420,7 @@ export default {
   align-items: center;
   background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
   color: white;
-  padding: 0.4rem 0.8rem;
+  padding: 0.4rem 0.9rem;
   border-radius: 20px;
   font-size: 0.75rem;
   font-weight: 500;
@@ -417,26 +437,261 @@ export default {
   }
 }
 
-.email-cell {
+/* بطاقة الامتحان */
+.exam-results-card {
+  background: var(--white, #fff);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.07);
+  border: 1px solid var(--border, #e9ecef);
+}
+
+.exam-card-header {
+  padding: 1.25rem 1.5rem;
+  background: var(--white, #fff);
+  border-bottom: 1px solid var(--border, #e9ecef);
+}
+
+.exam-icon {
+  width: 44px;
+  height: 44px;
+  background: #eff6ff;
+  color: #3b82f6;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.exam-title {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--dark, #1a1a2e);
+}
+
+.participants-badge {
+  font-size: 0.78rem;
+  color: var(--gray, #6c757d);
+  margin-top: 2px;
+  display: inline-block;
+}
+
+/* إحصائيات صغيرة */
+.stat-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 6px 14px;
+  min-width: 62px;
+}
+
+.stat-label {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.stat-value.primary {
+  color: #3b82f6;
+}
+.stat-value.success {
+  color: #10b981;
+}
+.stat-value.danger {
+  color: #ef4444;
+}
+
+/* أزرار */
+.btn-excel {
+  background: #217346;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 0.45rem 1rem;
   font-size: 0.85rem;
-  color: var(--gray);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.2s;
+}
+
+.btn-excel:hover:not(:disabled) {
+  background: #185c37;
+  color: #fff;
+}
+.btn-excel:disabled {
+  opacity: 0.6;
+}
+
+.btn-delete-exam {
+  background: transparent;
+  color: #ef4444;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.btn-delete-exam:hover:not(:disabled) {
+  background: #ef4444;
+  color: #fff;
+}
+
+/* جدول */
+.table-custom {
+  width: 100%;
+}
+
+.table-custom thead th {
+  background: #f8fafc;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 2px solid #e2e8f0;
+  text-align: right;
+}
+
+.table-custom tbody td {
+  padding: 0.9rem 1rem;
+  vertical-align: middle;
+  color: var(--dark, #1a1a2e);
+  font-size: 0.9rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.table-custom tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table-custom tbody tr:hover td {
+  background: #f8fafc;
+}
+
+/* أفاتار الطالب */
+.student-avatar {
+  width: 32px;
+  height: 32px;
+  background: #eff6ff;
+  color: #3b82f6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+/* بادج النتيجة */
+.score-badge {
+  padding: 0.3rem 0.75rem;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.score-badge.excellent {
+  background: #d1fae5;
+  color: #065f46;
+}
+.score-badge.good {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.score-badge.average {
+  background: #fef3c7;
+  color: #92400e;
+}
+.score-badge.poor {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.answers-cell {
+  font-weight: 600;
+  color: #475569;
+}
+
+.email-cell {
+  font-size: 0.83rem;
+  color: #64748b;
+  direction: ltr;
+  text-align: right;
 }
 
 .date-cell {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
+  color: #64748b;
   white-space: nowrap;
 }
 
-.btn-outline-danger {
-  transition: all 0.2s ease;
+/* أزرار الإجراءات */
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  border: 1px solid;
+  transition: all 0.2s;
+  padding: 0;
 }
 
-.btn-outline-danger:hover:not(:disabled) {
-  transform: scale(1.05);
+.btn-reset {
+  color: #3b82f6;
+  border-color: #bfdbfe;
+  background: transparent;
 }
 
-.btn-outline-danger:disabled {
-  opacity: 0.5;
+.btn-reset:hover:not(:disabled) {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
+}
+
+.btn-del {
+  color: #ef4444;
+  border-color: #fecaca;
+  background: transparent;
+}
+
+.btn-del:hover:not(:disabled) {
+  background: #ef4444;
+  color: #fff;
+  border-color: #ef4444;
+}
+
+.btn-icon:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* empty state */
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: #94a3b8;
+}
+
+.empty-state i {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: block;
 }
 </style>

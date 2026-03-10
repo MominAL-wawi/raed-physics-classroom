@@ -53,18 +53,28 @@
           </button>
         </div>
         <div class="card-body">
-          <!-- Search -->
+          <!-- Search with Add Button -->
           <div class="search-box mb-4">
-            <div class="input-group">
-              <span class="input-group-text bg-white border-end-0">
-                <i class="bi bi-search text-muted"></i>
-              </span>
-              <input
-                type="text"
-                class="form-control border-start-0"
-                placeholder="البحث عن طالب..."
-                v-model="searchQuery"
-              />
+            <div class="d-flex gap-3 align-items-center">
+              <div class="input-group flex-grow-1">
+                <span class="input-group-text bg-white border-end-0">
+                  <i class="bi bi-search text-muted"></i>
+                </span>
+                <input
+                  type="text"
+                  class="form-control border-start-0"
+                  placeholder="البحث عن طالب..."
+                  v-model="searchQuery"
+                />
+              </div>
+              <button
+                class="btn btn-primary-custom d-flex align-items-center gap-2"
+                @click="showAddModal = true"
+                title="إضافة طالب جديد"
+              >
+                <i class="bi bi-person-plus-fill"></i>
+                <span class="d-none d-md-inline">إضافة طالب</span>
+              </button>
             </div>
           </div>
 
