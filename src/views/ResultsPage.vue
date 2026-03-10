@@ -1,8 +1,14 @@
 <template>
   <div class="dashboard-container py-4">
     <div class="container">
-      <h2 class="mb-4 page-title">
-        <i class="bi bi-bar-chart me-2"></i>نتائج الطلاب
+      <h2
+        class="mb-4 page-title d-flex align-items-center justify-content-between"
+      >
+        <span> <i class="bi bi-bar-chart me-2"></i>نتائج الطلاب </span>
+        <span class="realtime-indicator" title="تحديث تلقائي كل 3 ثواني">
+          <i class="bi bi-broadcast me-1"></i>
+          <small>تحديث مباشر</small>
+        </span>
       </h2>
 
       <!-- فلتر حسب الامتحان -->
@@ -151,8 +157,11 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useExamsStore } from "@/store/examsStore";
+
+// Firebase Realtime Database URL
+const DATABASE_URL = "https://studyphysics-bd79d-default-rtdb.firebaseio.com/";
 
 export default {
   name: "ResultsPage",
@@ -160,10 +169,111 @@ export default {
     const examsStore = useExamsStore();
     const selectedExam = ref("");
     const isDeleting = ref(false);
+    const realtimeResults = ref({});
+    const eventSources = ref({});
+    const isLoadingRealtime = ref(false);
+
+    // دالة لبدء الاستماع للتحديثات الفورية لامتحان معين
+    const startRealtimeListener = (examId) => {
+      // إذا كان هناك listener موجود لهذا الامتحان، لا نضيف آخر
+      if (eventSources.value[examId]) {
+        return;
+      }
+
+      // استخدام EventSource للاستماع للتحديثات الفورية من Firebase
+      // const url = `${DATABASE_URL}results.json?orderBy="examId"&equalTo="${examId}"`;
+
+      // بدء polling كل 3 ثواني للحصول على التحديثات الفورية
+      const pollInterval = setInterval(async () => {
+        try {
+          const response = await fetch(`${DATABASE_URL}results.json`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data) {
+              // تحويل البيانات وتحديث النتائج
+              const allResults = Object.entries(data).map(([key, value]) => ({
+                ...value,
+                firebaseKey: key,
+              }));
+
+              // تحديث نتائج الامتحان المحدد
+              realtimeResults.value[examId] = allResults.filter(
+                (r) => r.examId === examId
+              );
+
+              // تحديث الـ store أيضاً
+              examsStore.results = allResults;
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching realtime results:", error);
+        }
+      }, 3000);
+
+      eventSources.value[examId] = pollInterval;
+    };
+
+    // إيقاف الاستماع لامتحان معين
+    const stopRealtimeListener = (examId) => {
+      if (eventSources.value[examId]) {
+        clearInterval(eventSources.value[examId]);
+        delete eventSources.value[examId];
+      }
+    };
+
+    // إيقاف جميع المستمعين
+    const stopAllRealtimeListeners = () => {
+      Object.keys(eventSources.value).forEach((examId) => {
+        clearInterval(eventSources.value[examId]);
+      });
+      eventSources.value = {};
+    };
+
+    // مراقبة تغيير الامتحان المحدد لبدء/إيقاف الاستماع
+    watch(selectedExam, (newExamId, oldExamId) => {
+      // إيقاف الاستماع للامتحان القديم
+      if (oldExamId) {
+        stopRealtimeListener(oldExamId);
+      }
+      // بدء الاستماع للامتحان الجديد
+      if (newExamId) {
+        startRealtimeListener(newExamId);
+      }
+    });
 
     // تحميل البيانات من Firebase عند تحميل الصفحة
     onMounted(async () => {
+      isLoadingRealtime.value = true;
       await Promise.all([examsStore.loadExams(), examsStore.loadResults()]);
+      isLoadingRealtime.value = false;
+
+      // بدء التحديث الفوري للكل إذا لم يكن هناك امتحان محدد
+      if (!selectedExam.value) {
+        // polling عام لجميع النتائج
+        const globalPollInterval = setInterval(async () => {
+          try {
+            const response = await fetch(`${DATABASE_URL}results.json`);
+            if (response.ok) {
+              const data = await response.json();
+              if (data) {
+                const allResults = Object.entries(data).map(([key, value]) => ({
+                  ...value,
+                  firebaseKey: key,
+                }));
+                examsStore.results = allResults;
+              }
+            }
+          } catch (error) {
+            console.error("Error fetching realtime results:", error);
+          }
+        }, 3000);
+        eventSources.value["global"] = globalPollInterval;
+      }
+    });
+
+    // تنظيف المستمعين عند مغادرة الصفحة
+    onUnmounted(() => {
+      stopAllRealtimeListeners();
     });
 
     const filteredResults = computed(() => {
@@ -217,7 +327,7 @@ export default {
     const resetExamForStudent = async (result) => {
       if (
         !confirm(
-          `هل أنت متأكد من إعادة الامتحان للطالب ${result.studentName}؟\nسيتم حذف نتيجته الحالية وسيتمكن من إعادة الامتحان.`
+          `هل أنت ��تأكد من إعادة الامتحان للطالب ${result.studentName}؟\nسيتم حذف نتيجته الحالية وسيتمكن من إعادة الامتحان.`
         )
       )
         return;
@@ -274,6 +384,7 @@ export default {
       resetExamForStudent,
       deleteAllExamResults,
       isDeleting,
+      isLoadingRealtime,
     };
   },
 };
@@ -282,6 +393,28 @@ export default {
 <style scoped>
 .page-title {
   font-weight: 700;
+}
+
+.realtime-indicator {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  animation: pulse-realtime 2s infinite;
+}
+
+@keyframes pulse-realtime {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 .email-cell {

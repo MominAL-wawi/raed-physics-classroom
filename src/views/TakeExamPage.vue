@@ -556,18 +556,37 @@ export default {
         // المستخدم غادر الصفحة - حفظ الحالة فقط بدون تسليم
         saveExamStateToLocal();
         showLeaveWarning.value = true;
+        // لا نسلم الامتحان - فقط نحفظ الحالة والوقت يستمر
       } else {
         // المستخدم عاد - استمرار الامتحان بشكل طبيعي
-        // لا نسلم الامتحان تلقائياً، فقط نحدث الوقت المتبقي
-        const examId = route.params.id;
-        const ongoingData = examsStore.startOrResumeExam(
-          examId,
-          authStore.user.email
-        );
-        if (ongoingData && !ongoingData.expired) {
-          timeRemaining.value = ongoingData.timeRemaining;
+        // حساب الوقت المنقضي أثناء الغياب
+        const examId = exam.value?.firebaseKey || exam.value?.id;
+        if (examId) {
+          const localState = loadExamStateFromLocal(examId);
+          if (localState) {
+            // حساب الوقت المنقضي منذ آخر حفظ
+            const elapsedSinceLastSave = Math.floor(
+              (Date.now() - localState.savedAt) / 1000
+            );
+            // تحديث الوقت المتبقي (الوقت يستمر حتى أثناء الغياب)
+            const newTimeRemaining = Math.max(
+              timeRemaining.value - elapsedSinceLastSave,
+              0
+            );
+            timeRemaining.value = newTimeRemaining;
+
+            // إذا انتهى الوقت أثناء الغياب، نسلم الامتحان
+            if (newTimeRemaining <= 0) {
+              submitExam();
+              return;
+            }
+          }
         }
-        // لا نسلم حتى لو انتهى الوقت أثناء الغياب - المؤقت سيتعامل معه
+        // لا نسلم الامتحان - الطالب يستمر من حيث توقف
+        showLeaveWarning.value = true;
+        setTimeout(() => {
+          showLeaveWarning.value = false;
+        }, 3000);
       }
     };
 
@@ -593,24 +612,43 @@ export default {
       isOffline.value = true;
     };
 
+    // مرجع لتخزين event listeners للتنظيف لاحقاً
+    const eventListeners = ref([]);
+
     // منع تصوير الشاشة وتسجيل الفيديو
     const preventScreenCapture = () => {
       // منع النسخ
-      document.addEventListener("copy", (e) => {
+      const copyHandler = (e) => {
         if (questions.value.length > 0) {
           e.preventDefault();
         }
-      });
+      };
+      document.addEventListener("copy", copyHandler);
+      eventListeners.value.push({ type: "copy", handler: copyHandler });
+
+      // منع القص
+      const cutHandler = (e) => {
+        if (questions.value.length > 0) {
+          e.preventDefault();
+        }
+      };
+      document.addEventListener("cut", cutHandler);
+      eventListeners.value.push({ type: "cut", handler: cutHandler });
 
       // منع النقر بالزر الأيمن
-      document.addEventListener("contextmenu", (e) => {
+      const contextHandler = (e) => {
         if (questions.value.length > 0) {
           e.preventDefault();
         }
+      };
+      document.addEventListener("contextmenu", contextHandler);
+      eventListeners.value.push({
+        type: "contextmenu",
+        handler: contextHandler,
       });
 
       // منع اختصارات لوحة المفاتيح للتصوير
-      document.addEventListener("keydown", (e) => {
+      const keydownHandler = (e) => {
         if (questions.value.length > 0) {
           // منع Print Screen
           if (e.key === "PrintScreen") {
@@ -629,16 +667,73 @@ export default {
           if (e.metaKey && e.shiftKey && (e.key === "3" || e.key === "4")) {
             e.preventDefault();
           }
+          // منع Ctrl+Shift+I (Developer Tools)
+          if (e.ctrlKey && e.shiftKey && e.key === "I") {
+            e.preventDefault();
+          }
+          // منع F12 (Developer Tools)
+          if (e.key === "F12") {
+            e.preventDefault();
+          }
         }
-      });
+      };
+      document.addEventListener("keydown", keydownHandler);
+      eventListeners.value.push({ type: "keydown", handler: keydownHandler });
+
+      // محاولة منع تسجيل الشاشة عبر CSS
+      const examContainer = document.querySelector(".exam-secure-container");
+      if (examContainer) {
+        // إضافة حماية إضافية عبر CSS
+        examContainer.style.setProperty("-webkit-touch-callout", "none");
+        examContainer.style.setProperty("-webkit-user-select", "none");
+        examContainer.style.setProperty("-khtml-user-select", "none");
+        examContainer.style.setProperty("-moz-user-select", "none");
+        examContainer.style.setProperty("-ms-user-select", "none");
+        examContainer.style.setProperty("user-select", "none");
+      }
+
+      // محاولة الكشف عن Screen Recording/Sharing APIs
+      if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+        // نحاول اكتشاف محاولات تسجيل الشاشة
+        const originalGetDisplayMedia =
+          navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+        navigator.mediaDevices.getDisplayMedia = async function (constraints) {
+          if (questions.value.length > 0) {
+            alert("تسجيل الشاشة غير مسموح أثناء الامتحان");
+            throw new Error("Screen recording is not allowed during exam");
+          }
+          return originalGetDisplayMedia(constraints);
+        };
+      }
 
       // الكشف عن مشاركة الشاشة (Screen Sharing Detection)
       if (navigator.mediaDevices) {
-        navigator.mediaDevices.addEventListener("devicechange", () => {
+        const deviceChangeHandler = () => {
           // تم تغيير الأجهزة - قد يكون هناك مشاركة شاشة
           console.log("Device change detected");
-        });
+        };
+        navigator.mediaDevices.addEventListener(
+          "devicechange",
+          deviceChangeHandler
+        );
       }
+
+      // منع السحب والإفلات للصور
+      const dragHandler = (e) => {
+        if (questions.value.length > 0) {
+          e.preventDefault();
+        }
+      };
+      document.addEventListener("dragstart", dragHandler);
+      eventListeners.value.push({ type: "dragstart", handler: dragHandler });
+    };
+
+    // تنظيف event listeners عند مغادرة الصفحة
+    const cleanupEventListeners = () => {
+      eventListeners.value.forEach(({ type, handler }) => {
+        document.removeEventListener(type, handler);
+      });
+      eventListeners.value = [];
     };
 
     onMounted(async () => {
@@ -771,6 +866,8 @@ export default {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      // تنظيف event listeners الخاصة بحماية الشاشة
+      cleanupEventListeners();
     });
 
     return {
