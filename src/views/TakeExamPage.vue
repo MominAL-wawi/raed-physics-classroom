@@ -1,5 +1,12 @@
 <template>
   <div class="dashboard-container exam-secure-container">
+    <!-- علامة مائية باسم الطالب للحماية من التصوير -->
+    <div class="watermark-overlay" aria-hidden="true">
+      <div class="watermark-content">
+        <span v-for="i in 20" :key="i">{{ studentWatermark }}</span>
+      </div>
+    </div>
+
     <!-- تحذير أمني -->
     <transition name="fade">
       <div v-if="securityWarningVisible" class="security-warning-overlay">
@@ -23,18 +30,6 @@
           <i class="bi bi-clock me-2"></i>
           {{ formattedTime }}
         </div>
-      </div>
-
-      <!-- تحذير في حالة المغادرة -->
-      <div
-        v-if="showLeaveWarning"
-        class="alert alert-warning d-flex align-items-center mb-4"
-      >
-        <i class="bi bi-exclamation-triangle-fill me-2"></i>
-        <span
-          >تنبيه: إذا غادرت الصفحة، سيستمر العد التنازلي وستتمكن من الاستكمال
-          عند العودة</span
-        >
       </div>
 
       <!-- تحذير انقطاع الاتصال -->
@@ -253,7 +248,7 @@ export default {
     const timerInterval = ref(null);
     const score = ref(0);
     const correctAnswers = ref(0);
-    const showLeaveWarning = ref(false);
+
     const isSubmitting = ref(false);
     const submitError = ref(null);
     const isOffline = ref(!navigator.onLine);
@@ -294,6 +289,13 @@ export default {
       if (score.value >= 70) return "جيد جداً";
       if (score.value >= 50) return "جيد، يمكنك التحسن";
       return "تحتاج للمزيد من المذاكرة";
+    });
+
+    // علامة مائية باسم الطالب
+    const studentWatermark = computed(() => {
+      const name = authStore.user?.name || authStore.user?.email || "طالب";
+      const date = new Date().toLocaleDateString("ar-SA");
+      return `${name} - ${date}`;
     });
 
     // حفظ محلي + localStorage للعمل أوفلاين
@@ -413,7 +415,7 @@ export default {
         clearPendingSubmission();
         clearLocalExamState(resultData.examId);
 
-        // عرض النتيجة بعد نجاح الحفظ
+        // ��رض النتيجة بعد نجاح الحفظ
         showResultModal();
       } catch (error) {
         console.error("Error submitting exam:", error);
@@ -565,7 +567,6 @@ export default {
       if (document.hidden) {
         // المستخدم غادر الصفحة - حفظ الحالة فقط بدون تسليم
         saveExamStateToLocal();
-        showLeaveWarning.value = true;
         // لا نسلم الامتحان - فقط نحفظ الحالة والوقت يستمر
       } else {
         // المستخدم عاد - استمرار الامتحان بشكل طبيعي
@@ -592,11 +593,7 @@ export default {
             }
           }
         }
-        // لا نسلم الامتحان - الطالب يستمر من حيث توقف
-        showLeaveWarning.value = true;
-        setTimeout(() => {
-          showLeaveWarning.value = false;
-        }, 3000);
+        // المستخدم يستمر من حيث توقف بدون أي تحذير
       }
     };
 
@@ -940,37 +937,6 @@ export default {
         handler: devToolsInterval,
       });
 
-      // تعتيم المحتوى عند فقدان التركيز (الخروج من النافذة)
-      const blurHandler = () => {
-        if (questions.value.length > 0) {
-          const container = document.querySelector(".exam-secure-container");
-          if (container) {
-            container.classList.add("blurred-content");
-          }
-          showSecurityWarning("يرجى البقاء في صفحة الامتحان");
-        }
-      };
-
-      const focusHandler = () => {
-        const container = document.querySelector(".exam-secure-container");
-        if (container) {
-          container.classList.remove("blurred-content");
-        }
-      };
-
-      window.addEventListener("blur", blurHandler);
-      window.addEventListener("focus", focusHandler);
-      eventListeners.value.push({
-        type: "blur",
-        handler: blurHandler,
-        target: window,
-      });
-      eventListeners.value.push({
-        type: "focus",
-        handler: focusHandler,
-        target: window,
-      });
-
       // مراقبة الحافظة ومسحها باستمرار أثناء الامتحان
       const clipboardInterval = setInterval(() => {
         if (questions.value.length > 0) {
@@ -1035,12 +1001,6 @@ export default {
       );
       if (protectionStyles) {
         protectionStyles.remove();
-      }
-
-      // إزالة تعتيم المحتوى
-      const container = document.querySelector(".exam-secure-container");
-      if (container) {
-        container.classList.remove("blurred-content");
       }
     };
 
@@ -1146,14 +1106,6 @@ export default {
         timeRemaining.value = ongoingData.timeRemaining;
       }
 
-      // إذا كان هناك امتحان سابق، أظهر تحذير
-      if (Object.keys(answers.value).length > 0) {
-        showLeaveWarning.value = true;
-        setTimeout(() => {
-          showLeaveWarning.value = false;
-        }, 5000);
-      }
-
       startTimer();
 
       // إضافة مستمعات الأحداث
@@ -1191,11 +1143,12 @@ export default {
       correctAnswers,
       resultClass,
       resultMessage,
-      showLeaveWarning,
+
       isOffline,
       hasPendingSubmission,
       securityWarningVisible,
       securityWarningMessage,
+      studentWatermark,
       selectAnswer,
       nextQuestion,
       previousQuestion,
@@ -1462,30 +1415,6 @@ export default {
   background: black;
 }
 
-/* تعتيم عند فقدان التركيز */
-.exam-secure-container.blurred-content .question-card,
-.exam-secure-container.blurred-content .card {
-  filter: blur(20px) !important;
-  pointer-events: none !important;
-  transition: filter 0.1s ease !important;
-}
-
-.exam-secure-container.blurred-content::after {
-  content: "يرجى العودة للامتحان - الخروج غير مسموح";
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(220, 53, 69, 0.95);
-  color: white;
-  padding: 30px 50px;
-  border-radius: 15px;
-  font-size: 24px;
-  font-weight: bold;
-  z-index: 10000;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-}
-
 /* تحذير أمني */
 .security-warning-overlay {
   position: fixed;
@@ -1541,6 +1470,43 @@ export default {
   80% {
     transform: translateX(10px);
   }
+}
+
+/* علامة مائية للحماية من التصوير */
+.watermark-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 9998;
+  overflow: hidden;
+  opacity: 0.06;
+}
+
+.watermark-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 80px;
+  transform: rotate(-30deg);
+  transform-origin: center;
+  width: 200%;
+  height: 200%;
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  justify-content: center;
+  align-items: center;
+}
+
+.watermark-content span {
+  font-size: 16px;
+  font-weight: bold;
+  color: #000;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* انتقالات */

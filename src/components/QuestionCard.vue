@@ -51,7 +51,7 @@
             option === question.correctAnswer ? 'bg-success' : 'bg-secondary'
           "
         >
-          {{ String.fromCharCode(65 + index) }}
+          {{ ["أ", "ب", "ج", "د", "هـ", "و"][index] || index + 1 }}
         </span>
         <span
           :class="{ 'text-success fw-bold': option === question.correctAnswer }"

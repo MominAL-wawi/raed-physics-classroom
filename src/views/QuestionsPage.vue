@@ -166,7 +166,7 @@
                     class="input-group mb-2"
                   >
                     <span class="input-group-text">{{
-                      String.fromCharCode(65 + index)
+                      ["أ", "ب", "ج", "د", "هـ", "و"][index] || index + 1
                     }}</span>
                     <input
                       type="text"
@@ -210,7 +210,8 @@
                       :key="index"
                       :value="option"
                     >
-                      {{ String.fromCharCode(65 + index) }} - {{ option }}
+                      {{ ["أ", "ب", "ج", "د", "هـ", "و"][index] || index + 1 }}
+                      - {{ option }}
                     </option>
                   </select>
                   <div v-else class="btn-group w-100">
