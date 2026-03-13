@@ -15,12 +15,43 @@ export const useExamsStore = defineStore("exams", {
       const now = new Date();
       return state.exams.filter((e) => {
         if (!e.isActive) return false;
+        // إذا تم تجاهل الموعد النهائي → متاح دائماً
+        if (e.ignoreDeadline) return true;
         // إذا لم تُحدد نافذة وقت → متاح دائماً
         if (!e.startDateTime && !e.endDateTime) return true;
         const start = e.startDateTime ? new Date(e.startDateTime) : null;
         const end = e.endDateTime ? new Date(e.endDateTime) : null;
         if (start && now < start) return false; // لم يبدأ بعد
         if (end && now > end) return false; // انتهى
+        return true;
+      });
+    },
+    // الحصول على الاختبارات المتاحة لطالب معين (مع مراعاة الاستثناءات)
+    getActiveExamsForStudent: (state) => (studentEmail) => {
+      const now = new Date();
+      return state.exams.filter((e) => {
+        if (!e.isActive) return false;
+        // إذا تم تجاهل الموعد النهائي → متاح دائماً
+        if (e.ignoreDeadline) return true;
+        // إذا لم تُحدد نافذة وقت → متاح دائماً
+        if (!e.startDateTime && !e.endDateTime) return true;
+        const start = e.startDateTime ? new Date(e.startDateTime) : null;
+        const end = e.endDateTime ? new Date(e.endDateTime) : null;
+        if (start && now < start) return false; // لم يبدأ بعد
+        if (end && now > end) {
+          // انتهى - لكن تحقق من الاستثناءات
+          const allowedStudents = e.allowedAfterDeadline || [];
+          if (allowedStudents.includes(studentEmail)) return true;
+          // تحقق من قائمة الطلاب المحددين
+          if (e.selectedStudents && e.selectedStudents.length > 0) {
+            return e.selectedStudents.includes(studentEmail);
+          }
+          return false;
+        }
+        // تحقق من قائمة الطلاب المحددين
+        if (e.selectedStudents && e.selectedStudents.length > 0) {
+          return e.selectedStudents.includes(studentEmail);
+        }
         return true;
       });
     },
@@ -171,6 +202,67 @@ export const useExamsStore = defineStore("exams", {
         console.error("Error resetting exam for student:", error);
         throw error;
       }
+    },
+
+    // فتح الاختبار لطالب معين بعد انتهاء الوقت (إضافة استثناء)
+    async openExamForStudent(examId, studentEmail) {
+      try {
+        const exam = this.exams.find((e) => e.firebaseKey === examId);
+        if (exam) {
+          const allowedStudents = exam.allowedAfterDeadline || [];
+          if (!allowedStudents.includes(studentEmail)) {
+            allowedStudents.push(studentEmail);
+            await this.updateExam(examId, {
+              allowedAfterDeadline: allowedStudents,
+            });
+          }
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error("Error opening exam for student:", error);
+        throw error;
+      }
+    },
+
+    // فتح الاختبار للجميع بعد انتهاء الوقت
+    async openExamForAll(examId) {
+      try {
+        await this.updateExam(examId, {
+          ignoreDeadline: true,
+          endDateTime: null,
+        });
+        return true;
+      } catch (error) {
+        console.error("Error opening exam for all:", error);
+        throw error;
+      }
+    },
+
+    // إغلاق الاختبار (إعادة تفعيل الموعد النهائي)
+    async closeExamDeadline(examId, endDateTime) {
+      try {
+        await this.updateExam(examId, {
+          ignoreDeadline: false,
+          endDateTime: endDateTime,
+          allowedAfterDeadline: [],
+        });
+        return true;
+      } catch (error) {
+        console.error("Error closing exam deadline:", error);
+        throw error;
+      }
+    },
+
+    // التحقق إذا كان الطالب مسموحاً له بتقديم الاختبار بعد الموعد
+    isStudentAllowedAfterDeadline(examId, studentEmail) {
+      const exam = this.exams.find(
+        (e) => e.firebaseKey === examId || e.id === examId
+      );
+      if (!exam) return false;
+      if (exam.ignoreDeadline) return true;
+      const allowedStudents = exam.allowedAfterDeadline || [];
+      return allowedStudents.includes(studentEmail);
     },
 
     async deleteExam(firebaseKey) {

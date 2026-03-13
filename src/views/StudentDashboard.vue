@@ -237,8 +237,24 @@ export default {
       ]);
     });
 
-    // عرض جميع الامتحانات النشطة (سواء مفتوحة أو لم تبدأ أو منتهية) ليرى الطالب الحالة
-    const availableExams = computed(() => examsStore.getAllActiveExams);
+    // عرض الامتحانات المتاحة للطالب الحالي (مع مراعاة الطلاب المحددين والاستثناءات)
+    const availableExams = computed(() => {
+      const studentEmail = authStore.user?.email;
+      if (!studentEmail) return [];
+
+      return examsStore.exams.filter((exam) => {
+        if (!exam.isActive) return false;
+
+        // تحقق من قائمة الطلاب المحددين
+        if (exam.selectedStudents && exam.selectedStudents.length > 0) {
+          if (!exam.selectedStudents.includes(studentEmail)) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+    });
     const recentFiles = computed(() => filesStore.files.slice(-6));
 
     const completedExamsCount = computed(() => {
@@ -291,7 +307,21 @@ export default {
     };
 
     const getExamTimeStatus = (exam) => {
-      return examsStore.getExamTimeStatus(exam);
+      // إذا تم تجاهل الموعد النهائي - مفتوح للجميع
+      if (exam.ignoreDeadline) return "open";
+
+      // تحقق من الاستثناءات للطالب الحالي
+      const studentEmail = authStore.user?.email;
+      const allowedStudents = exam.allowedAfterDeadline || [];
+
+      const baseStatus = examsStore.getExamTimeStatus(exam);
+
+      // إذا انتهى الوقت لكن الطالب مسموح له
+      if (baseStatus === "ended" && allowedStudents.includes(studentEmail)) {
+        return "open";
+      }
+
+      return baseStatus;
     };
 
     const formatDateTime = (dt) => {

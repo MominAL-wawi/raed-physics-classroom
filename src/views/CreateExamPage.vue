@@ -51,6 +51,116 @@
                   </div>
                 </div>
 
+                <!-- اختيار الطلاب المستهدفين -->
+                <div class="students-selection-card mb-4">
+                  <div class="students-selection-header">
+                    <i class="bi bi-people me-2"></i>
+                    الطلاب المستهدفون
+                  </div>
+                  <div class="students-selection-body">
+                    <div class="form-check mb-3">
+                      <input
+                        class="form-check-input"
+                        type="radio"
+                        id="allStudents"
+                        value="all"
+                        v-model="studentSelectionMode"
+                      />
+                      <label class="form-check-label" for="allStudents">
+                        <strong>جميع الطلاب</strong>
+                        <small class="text-muted d-block"
+                          >الاختبار متاح لجميع الطلاب المسجلين</small
+                        >
+                      </label>
+                    </div>
+                    <div class="form-check">
+                      <input
+                        class="form-check-input"
+                        type="radio"
+                        id="selectedStudents"
+                        value="selected"
+                        v-model="studentSelectionMode"
+                      />
+                      <label class="form-check-label" for="selectedStudents">
+                        <strong>طلاب محددون</strong>
+                        <small class="text-muted d-block"
+                          >اختر الطلاب الذين يمكنهم تقديم الاختبار</small
+                        >
+                      </label>
+                    </div>
+
+                    <!-- قائمة الطلاب للاختيار -->
+                    <div
+                      v-if="studentSelectionMode === 'selected'"
+                      class="students-list mt-3"
+                    >
+                      <div
+                        class="d-flex justify-content-between align-items-center mb-2"
+                      >
+                        <input
+                          type="text"
+                          class="form-control form-control-sm"
+                          v-model="studentSearchQuery"
+                          placeholder="بحث عن طالب..."
+                          style="max-width: 250px"
+                        />
+                        <span class="badge bg-primary"
+                          >{{ selectedStudents.length }} طالب محدد</span
+                        >
+                      </div>
+                      <div
+                        class="students-checkboxes"
+                        style="max-height: 200px; overflow-y: auto"
+                      >
+                        <div
+                          v-for="student in filteredStudentsList"
+                          :key="student.firebaseKey"
+                          class="form-check student-checkbox-item"
+                        >
+                          <input
+                            class="form-check-input"
+                            type="checkbox"
+                            :id="'student-' + student.firebaseKey"
+                            :value="student.email"
+                            v-model="selectedStudents"
+                          />
+                          <label
+                            class="form-check-label"
+                            :for="'student-' + student.firebaseKey"
+                          >
+                            {{ student.name }}
+                            <small class="text-muted"
+                              >({{ student.email }})</small
+                            >
+                          </label>
+                        </div>
+                        <div
+                          v-if="filteredStudentsList.length === 0"
+                          class="text-muted text-center py-2"
+                        >
+                          لا يوجد طلاب
+                        </div>
+                      </div>
+                      <div class="mt-2">
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-primary me-2"
+                          @click="selectAllStudents"
+                        >
+                          تحديد الكل
+                        </button>
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline-secondary"
+                          @click="deselectAllStudents"
+                        >
+                          إلغاء التحديد
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- نافذة الوقت المسموح بها -->
                 <div class="time-window-card">
                   <div class="time-window-header">
@@ -310,6 +420,7 @@ import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useQuestionsStore } from "@/store/questionsStore";
 import { useExamsStore } from "@/store/examsStore";
+import { useAuthStore } from "@/store/authStore";
 
 export default {
   name: "CreateExamPage",
@@ -317,11 +428,39 @@ export default {
     const router = useRouter();
     const questionsStore = useQuestionsStore();
     const examsStore = useExamsStore();
+    const authStore = useAuthStore();
+
+    // اختيار الطلاب
+    const studentSelectionMode = ref("all");
+    const selectedStudents = ref([]);
+    const studentSearchQuery = ref("");
 
     // تحميل البيانات من Firebase عند تحميل الصفحة
     onMounted(async () => {
-      await questionsStore.loadQuestions();
+      await Promise.all([
+        questionsStore.loadQuestions(),
+        authStore.loadStudents(),
+      ]);
     });
+
+    // فلترة قائمة الطلاب
+    const filteredStudentsList = computed(() => {
+      if (!studentSearchQuery.value) return authStore.students;
+      const query = studentSearchQuery.value.toLowerCase();
+      return authStore.students.filter(
+        (s) =>
+          s.name?.toLowerCase().includes(query) ||
+          s.email?.toLowerCase().includes(query)
+      );
+    });
+
+    const selectAllStudents = () => {
+      selectedStudents.value = authStore.students.map((s) => s.email);
+    };
+
+    const deselectAllStudents = () => {
+      selectedStudents.value = [];
+    };
 
     const form = ref({
       title: "",
@@ -406,6 +545,12 @@ export default {
           questions: questions,
           startDateTime: form.value.startDateTime || null,
           endDateTime: form.value.endDateTime || null,
+          selectedStudents:
+            studentSelectionMode.value === "selected"
+              ? selectedStudents.value
+              : [],
+          ignoreDeadline: false,
+          allowedAfterDeadline: [],
         });
 
         router.push("/teacher/exams");
@@ -419,6 +564,7 @@ export default {
 
     return {
       questionsStore,
+      authStore,
       form,
       selectedQuestions,
       questionFilter,
@@ -430,6 +576,12 @@ export default {
       formatDateTime,
       isCreating,
       createExam,
+      studentSelectionMode,
+      selectedStudents,
+      studentSearchQuery,
+      filteredStudentsList,
+      selectAllStudents,
+      deselectAllStudents,
     };
   },
 };
@@ -497,5 +649,43 @@ export default {
   padding: 8px 12px;
   border: 1px solid rgba(6, 214, 160, 0.25);
   line-height: 1.6;
+}
+
+/* اختيار الطلاب */
+.students-selection-card {
+  border: 1.5px solid rgba(40, 167, 69, 0.2);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.students-selection-header {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  color: white;
+  padding: 12px 18px;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.students-selection-body {
+  padding: 16px 18px;
+  background: rgba(40, 167, 69, 0.03);
+}
+
+.student-checkbox-item {
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  transition: background 0.2s;
+}
+
+.student-checkbox-item:hover {
+  background: rgba(40, 167, 69, 0.08);
+}
+
+.students-checkboxes {
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 8px;
+  background: white;
 }
 </style>
