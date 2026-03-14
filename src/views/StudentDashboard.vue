@@ -132,6 +132,7 @@
                     النتيجة: {{ getExamResult(exam.firebaseKey || exam.id) }}%
                   </span>
                   <router-link
+                    v-if="exam.allowReview"
                     :to="`/student/results/review/${getExamResultId(
                       exam.firebaseKey || exam.id
                     )}`"
@@ -140,6 +141,10 @@
                     <i class="bi bi-eye me-1"></i>
                     مراجعة
                   </router-link>
+                  <span v-else class="review-disabled">
+                    <i class="bi bi-eye-slash me-1"></i>
+                    المراجعة غير متاحة
+                  </span>
                 </div>
 
                 <!-- زر البدء (مشروط بنافذة الوقت) -->
@@ -678,6 +683,17 @@ export default {
 .btn-review-exam:hover {
   background: #4361ee;
   color: white;
+}
+
+.review-disabled {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(108, 117, 125, 0.1);
+  color: #6c757d;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 0.83rem;
+  font-weight: 500;
 }
 
 .btn-start-exam {

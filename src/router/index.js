@@ -8,6 +8,7 @@ import StudentDashboard from "@/views/StudentDashboard.vue";
 import QuestionsPage from "@/views/QuestionsPage.vue";
 import ExamsPage from "@/views/ExamsPage.vue";
 import CreateExamPage from "@/views/CreateExamPage.vue";
+import EditExamPage from "@/views/EditExamPage.vue";
 import TakeExamPage from "@/views/TakeExamPage.vue";
 import FilesPage from "@/views/FilesPage.vue";
 import ResultsPage from "@/views/ResultsPage.vue";
@@ -55,6 +56,12 @@ const routes = [
     path: "/teacher/exams/create",
     name: "CreateExam",
     component: CreateExamPage,
+    meta: { requiresAuth: true, role: "teacher" },
+  },
+  {
+    path: "/teacher/exams/edit/:id",
+    name: "EditExam",
+    component: EditExamPage,
     meta: { requiresAuth: true, role: "teacher" },
   },
   {

@@ -115,6 +115,14 @@
             <hr />
 
             <div class="d-flex gap-2 flex-wrap">
+              <router-link
+                :to="'/teacher/exams/edit/' + exam.firebaseKey"
+                class="btn btn-sm btn-outline-primary"
+                title="تعديل الامتحان"
+              >
+                <i class="bi bi-pencil"></i>
+                تعديل
+              </router-link>
               <button
                 class="btn btn-sm"
                 :class="exam.isActive ? 'btn-warning' : 'btn-success'"

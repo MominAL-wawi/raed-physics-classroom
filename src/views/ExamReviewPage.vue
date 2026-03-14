@@ -24,6 +24,25 @@
         <p class="mt-3 text-muted">جارٍ تحميل المراجعة...</p>
       </div>
 
+      <!-- Review Not Allowed -->
+      <div v-else-if="reviewNotAllowed" class="section-card">
+        <div class="card-body">
+          <div class="empty-state">
+            <i class="bi bi-eye-slash"></i>
+            <h4>المراجعة غير متاحة</h4>
+            <p class="text-muted">
+              الأستاذ لم يفعّل المراجعة لهذا الامتحان بعد
+            </p>
+            <router-link
+              to="/student/results"
+              class="btn btn-primary-custom mt-3"
+            >
+              العودة للنتائج
+            </router-link>
+          </div>
+        </div>
+      </div>
+
       <!-- Not Found -->
       <div v-else-if="!result" class="section-card">
         <div class="card-body">
@@ -266,13 +285,34 @@ export default {
   name: "ExamReviewPage",
   setup() {
     const route = useRoute();
+    // const router = useRouter();
     const authStore = useAuthStore();
     const examsStore = useExamsStore();
     const isLoading = ref(true);
+    const reviewNotAllowed = ref(false);
     const optionLetters = ["أ", "ب", "ج", "د", "هـ"];
 
     onMounted(async () => {
       await Promise.all([examsStore.loadExams(), examsStore.loadResults()]);
+
+      // التحقق من أن المراجعة مسموحة
+      const resultId = route.params.resultId;
+      const foundResult = examsStore.results.find(
+        (r) =>
+          (r.firebaseKey === resultId || r.id === resultId) &&
+          r.studentEmail === authStore.user?.email
+      );
+
+      if (foundResult) {
+        const exam = examsStore.exams.find(
+          (e) =>
+            e.firebaseKey === foundResult.examId || e.id === foundResult.examId
+        );
+        if (!exam?.allowReview) {
+          reviewNotAllowed.value = true;
+        }
+      }
+
       isLoading.value = false;
     });
 
@@ -323,6 +363,7 @@ export default {
 
     return {
       isLoading,
+      reviewNotAllowed,
       result,
       reviewQuestions,
       optionLetters,
